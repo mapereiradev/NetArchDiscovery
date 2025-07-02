@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>NetarchDiscovery - Network Scan</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<header>
+    <h1>NetarchDiscovery</h1>
+    <p>Scan Network or Single Device</p>
+</header>
+
+<main style="max-width: 900px; margin: 2rem auto;">
+    <section>
+        <h2>Scan Network / Device</h2>
+        <form action="{{ url_for('main.scan') }}" method="post">
+            <label for="target">IP or Network:</label><br>
+            <input type="text" id="target" name="target" placeholder="e.g. 192.168.1.0/24" required
+                   style="width:100%; padding:0.5rem; margin:0.5rem 0;">
+
+            <fieldset style="margin-top:1rem;">
+                <legend>Scan Options</legend>
+                <label><input type="checkbox" name="options" value="-sS"> SYN Scan (-sS)</label><br>
+                <label><input type="checkbox" name="options" value="-sV"> Service Version (-sV)</label><br>
+                <label><input type="checkbox" name="options" value="-O"> OS Detection (-O)</label><br>
+                <label><input type="checkbox" name="options" value="-A"> Aggressive (-A)</label><br>
+            </fieldset>
+
+            <button type="submit" style="margin-top:1rem;">Start Scan</button>
+        </form>
+    </section>
+
+    {% if results %}
+    <section>
+        <h2>Discovered Devices</h2>
+        <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+            {% for device in results %}
+            <div class="card">
+                <h3>{{ device.ip }}</h3>
+                <p><strong>OS:</strong> {{ device.os or 'Unknown' }}</p>
+                <p><strong>Open Ports:</strong></p>
+                <ul>
+                    {% for port in device.ports %}
+                        <li>{{ port }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</main>
+
+<footer>
+    <p>© 2025 NetarchDiscovery - Cybersecurity & Linux Infrastructure Auditing</p>
+</footer>
+</body>
+</html>

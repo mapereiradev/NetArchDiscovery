@@ -1,8 +1,15 @@
 import subprocess
 
-def run_nmap(target):
+def run_nmap(target, options=None):
+    if options is None:
+        options = []
+
+    cmd = ['nmap'] + options + ['-oX', '-', target]
+    if '-sS' in options or '-O' in options:
+        cmd.insert(0, 'sudo')
+
     try:
-        result = subprocess.run(['nmap', '-oX', '-', target], capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         return result.stdout
     except subprocess.CalledProcessError as e:
-        return e.stderr
+        return e.stderr or str(e)

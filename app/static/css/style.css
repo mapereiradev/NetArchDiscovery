@@ -1,0 +1,190 @@
+/* Reset básico */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 16px;
+    background-color: #0f111a;
+    color: #d8e1ff;
+    line-height: 1.6;
+}
+
+/* Cabecera */
+header {
+    background: linear-gradient(90deg, #4f46e5, #3b82f6);
+    color: #f0f0f0;
+    padding: 2rem;
+    text-align: center;
+    box-shadow: 0 0 15px #3b82f6;
+}
+
+header h1 {
+    font-size: 2.5rem;
+    letter-spacing: 2px;
+    margin-bottom: 0.5rem;
+}
+
+header p {
+    font-size: 1.1rem;
+    color: #e0e7ff;
+}
+
+/* Navegación */
+nav {
+    background-color: #1e293b;
+    display: flex;
+    justify-content: center;
+    padding: 0.75rem;
+    box-shadow: inset 0 -1px 0 rgba(255,255,255,0.1);
+}
+
+nav ul {
+    list-style: none;
+    display: flex;
+    gap: 2rem;
+}
+
+nav a {
+    color: #60a5fa;
+    text-decoration: none;
+    font-weight: bold;
+    position: relative;
+    transition: color 0.3s;
+}
+
+nav a::after {
+    content: '';
+    display: block;
+    height: 2px;
+    background: #60a5fa;
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+    transform-origin: left;
+}
+
+nav a:hover {
+    color: #93c5fd;
+}
+
+nav a:hover::after {
+    transform: scaleX(1);
+}
+
+/* Contenido principal */
+main {
+    max-width: 900px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+/* Secciones */
+section {
+    margin-bottom: 2.5rem;
+    background: rgba(30, 41, 59, 0.6);
+    padding: 1.5rem;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+    transition: background 0.3s, box-shadow 0.3s;
+}
+
+section:hover {
+    background: rgba(51, 65, 85, 0.7);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+}
+
+/* Titulares */
+section h2 {
+    margin-bottom: 1rem;
+    color: #93c5fd;
+    border-bottom: 2px solid #60a5fa;
+    display: inline-block;
+    padding-bottom: 0.2rem;
+}
+
+/* Listas */
+section ul {
+    list-style: square inside;
+    margin-left: 1rem;
+}
+
+section li {
+    margin-bottom: 0.5rem;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 1.5rem;
+    background-color: #1e293b;
+    color: #94a3b8;
+    margin-top: 3rem;
+    border-top: 1px solid #334155;
+}
+
+/* Botones genéricos */
+button {
+    background: #3b82f6;
+    color: #f9fafb;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.2s;
+}
+
+button:hover {
+    background: #60a5fa;
+    transform: translateY(-2px);
+}
+
+/* Código y tablas (por si los usas en reportes) */
+code, pre {
+    background-color: #1e293b;
+    color: #f8fafc;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+th, td {
+    border: 1px solid #334155;
+    padding: 0.75rem;
+    text-align: left;
+}
+
+th {
+    background-color: #1e293b;
+    color: #60a5fa;
+}
+
+.card {
+    flex: 1 1 220px;
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+}
+
+.card h3 {
+    color: #93c5fd;
+    margin-bottom: 0.5rem;
+}
