@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>Device {{ device.ip }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<header>
+    <h1>Details for {{ device.ip }}</h1>
+</header>
+
+<main style="max-width:800px; margin:auto;">
+    <p><strong>Hostname:</strong> {{ device.hostname or 'Unknown' }}</p>
+    <p><strong>Open Ports:</strong></p>
+    <table>
+        <thead><tr><th>Port</th><th>State</th><th>Service</th></tr></thead>
+        <tbody>
+            {% for port in device.ports %}
+            <tr>
+                <td>{{ port.port }}</td>
+                <td>{{ port.state }}</td>
+                <td>{{ port.service }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <button id="deepScanBtn" style="margin-top:2rem;">Deep Scan These Ports</button>
+    <pre id="deepScanOutput" style="background:#111; color:#0f0; padding:1rem; margin-top:1rem;"></pre>
+</main>
+
+<script>
+document.getElementById('deepScanBtn').addEventListener('click', () => {
+    const ports = "{{ device.ports | map(attribute='port') | join(',') }}";
+    fetch('/scan_ports', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ ip: "{{ device.ip }}", ports: ports })
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        document.getElementById('deepScanOutput').textContent = data.output || 'No data';
+    })
+    .catch(err => {
+        document.getElementById('deepScanOutput').textContent = 'Error: ' + err;
+    });
+});
+</script>
+
+</body>
+</html>

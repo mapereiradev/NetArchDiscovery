@@ -37,18 +37,33 @@
         <h2>Discovered Devices</h2>
         <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
             {% for device in results %}
-            <div class="card">
-                <h3>{{ device.ip }}</h3>
-                <p><strong>OS:</strong> {{ device.os or 'Unknown' }}</p>
-                <p><strong>Open Ports:</strong></p>
-                <ul>
-                    {% for port in device.ports %}
-                        <li>{{ port }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
+            <a href="device.html?ip={{ device.ip }}" style="text-decoration: none; color: inherit;">
+                <div class="card" id="{{ device.ip }}">
+                    <h3>{{ device.ip }}</h3>
+                    <p><strong>OS:</strong> {{ device.os or 'Unknown' }}</p>
+                    <p><strong>Open Ports:</strong></p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Port</th>
+                                <th>State</th>
+                                <th>Service</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for port in device.ports %}
+                            <tr>
+                                <td>{{ port.port }}</td>
+                                <td>{{ port.state }}</td>
+                                <td>{{ port.service }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </a>
             {% endfor %}
-        </div>
+            </div>
     </section>
     {% endif %}
 </main>
@@ -57,4 +72,8 @@
     <p>© 2025 NetarchDiscovery - Cybersecurity & Linux Infrastructure Auditing</p>
 </footer>
 </body>
+<script>
+    let scanningResult = '{{ results_json|safe }}';
+    localStorage.setItem("scanningResult", JSON.stringify(scanningResult));
+</script>
 </html>

@@ -188,3 +188,25 @@ th {
     color: #93c5fd;
     margin-bottom: 0.5rem;
 }
+
+.card table {
+    width: 100%;
+    margin-top: 0.5rem;
+    border-collapse: collapse;
+}
+
+.card th, .card td {
+    border: 1px solid #334155;
+    padding: 0.5rem;
+    text-align: left;
+}
+
+.card th {
+    background-color: #1e293b;
+    color: #60a5fa;
+    font-size: 0.9rem;
+}
+
+.card td {
+    font-size: 0.85rem;
+}
