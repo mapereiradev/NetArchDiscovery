@@ -37,7 +37,7 @@
         <h2>Discovered Devices</h2>
         <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
             {% for device in results %}
-            <a href="device.html?ip={{ device.ip }}" style="text-decoration: none; color: inherit;">
+            <a href="device/{{ device.ip }}" style="text-decoration: none; color: inherit;">
                 <div class="card" id="{{ device.ip }}">
                     <h3>{{ device.ip }}</h3>
                     <p><strong>OS:</strong> {{ device.os or 'Unknown' }}</p>
