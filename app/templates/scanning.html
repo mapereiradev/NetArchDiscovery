@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Escaneo de Red - NetarchDiscovery</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<header>
+  <h1>Escaneo de Red / Dispositivo</h1>
+</header>
+
+<main>
+  <section>
+    <form method="post" action="{{ url_for('main.scan') }}">
+      <label for="target">IP o red:</label>
+      <input id="target" type="text" name="target" placeholder="192.168.1.0/24" required value="{{ target or '' }}">
+
+      <fieldset>
+        <legend>Opciones de Nmap</legend>
+        <label><input type="checkbox" name="opt_sS" {% if request.form.get('opt_sS') %}checked{% endif %}> -sS (SYN Scan) *</label>
+        <label><input type="checkbox" name="opt_sV" {% if request.form.get('opt_sV') %}checked{% endif %}> -sV (Service/Version)</label>
+        <label><input type="checkbox" name="opt_O"  {% if request.form.get('opt_O')  %}checked{% endif %}> -O (OS Detection) *</label>
+        <p class="note">* Requiere privilegios root</p>
+      </fieldset>
+
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <button type="submit" class="btn">Iniciar Escaneo</button>
+        <button formaction="{{ url_for('main.analyze') }}" class="btn" title="Ejecuta también correlación y exportación">Analizar y correlacionar</button>
+      </div>
+    </form>
+  </section>
+
+  {% if submitted %}
+  <section>
+    <h2>Resultados</h2>
+
+    {% if meta %}
+      <div class="card" style="margin-bottom:1rem;">
+        <p class="note"><strong>Comando:</strong> <code>{{ meta.cmd }}</code></p>
+        {% if meta.stderr %}
+          <p class="note" style="color:#fca5a5;"><strong>STDERR:</strong> {{ meta.stderr }}</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if results and results|length > 0 %}
+      <div class="cards">
+        {% for device in results %}
+        <div class="card">
+          <h3>{{ device.ip }}{% if device.hostname %} <span class="muted">({{ device.hostname }})</span>{% endif %}</h3>
+          <p><strong>OS:</strong> {{ device.os or 'Desconocido' }}</p>
+
+          <div class="table-wrap">
+            <h4>Puertos abiertos</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Puerto</th>
+                  <th>Proto</th>
+                  <th>Estado</th>
+                  <th>Servicio</th>
+                  <th>Producto / Versión</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if device.ports and device.ports|length > 0 %}
+                  {% for p in device.ports %}
+                  <tr>
+                    <td>{{ p.port }}</td>
+                    <td>{{ p.proto }}</td>
+                    <td><span class="state {{ 'open' if p.state == 'open' else 'other' }}">{{ p.state }}</span></td>
+                    <td>{{ p.service or '' }}</td>
+                    <td>
+                      {% set pv = ((p.product or '') ~ ' ' ~ (p.version or ''))|trim %}
+                      {{ pv if pv else '—' }}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr><td colspan="5" class="muted">No se encontraron puertos abiertos.</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card"><p>No se encontraron hosts activos o puertos abiertos para {{ target }}.</p></div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if findings is defined %}
+  <section>
+    <h2>Hallazgos correlacionados</h2>
+    {% if findings|length == 0 %}
+      <div class="card"><p class="muted">No se detectaron hallazgos correlacionados en esta ejecución.</p></div>
+    {% else %}
+      <div class="cards">
+      {% for f in findings %}
+        <div class="card">
+          <h3>{{ f.classification.tag }} <span class="muted">({{ f.risk.sev|upper }})</span></h3>
+          <p><strong>Host ID:</strong> {{ f.host_id }}</p>
+          <p><strong>Ámbito:</strong> {{ f.scope }}</p>
+          <p><strong>Evidencia:</strong> {{ f.evidence }}</p>
+          <p><strong>Recomendación:</strong> {{ f.recommendation }}</p>
+          <p class="note"><strong>Fuente:</strong> {{ f.source_module }} — {{ f.timestamp }}</p>
+        </div>
+      {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Exportaciones</h2>
+    <div class="card">
+      <h3>assets.jsonl</h3>
+      <pre style="white-space:pre-wrap; max-height:240px; overflow:auto;">{{ assets_jsonl }}</pre>
+    </div>
+    <div class="card">
+      <h3>findings.jsonl</h3>
+      <pre style="white-space:pre-wrap; max-height:240px; overflow:auto;">{{ findings_jsonl }}</pre>
+    </div>
+    <div class="card">
+      <h3>Detalles del sistema local (enum)</h3>
+      <pre style="white-space:pre-wrap; max-height:240px; overflow:auto;">{{ local_facts | tojson(indent=2) }}</pre>
+    </div>
+  </section>
+  {% endif %}
+</main>
+
+<footer>
+  <p>© 2025 NetarchDiscovery</p>
+</footer>
+</body>
+</html>

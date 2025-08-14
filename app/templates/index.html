@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>NetarchDiscovery</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<header>
+    <h1>NetarchDiscovery</h1>
+    <p>Herramienta de descubrimiento y escaneo de redes</p>
+</header>
+<main>
+    <section>
+        <h2>Bienvenido</h2>
+        <p>Escanea dispositivos y redes Linux para descubrir servicios, puertos abiertos y posibles vulnerabilidades.</p>
+        <a class="btn" href="{{ url_for('main.scan') }}">Ir a Escaneo</a>
+    </section>
+</main>
+<footer>
+    <p>© 2025 NetarchDiscovery</p>
+</footer>
+</body>
+</html>
