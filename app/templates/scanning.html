@@ -2,138 +2,210 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Escaneo de Red - NetarchDiscovery</title>
+  <title>Escaneo de Red / Dispositivo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Mantén tu CSS original aquí -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    /* refuerzos mínimos por si faltan en tu CSS */
+    .container{max-width:1100px;margin:0 auto;padding:1rem}
+    .row{display:flex;gap:1rem;flex-wrap:wrap}
+    .col{flex:1 1 360px}
+    .card{border:1px solid #334155;border-radius:10px;padding:1rem;background:#0b1020}
+    .btn{background:#1f2937;color:#e5e7eb;border:1px solid #374151;padding:.5rem .75rem;border-radius:8px;cursor:pointer}
+    .btn:hover{background:#374151}
+    .muted{color:#94a3b8}
+    .progress{height:8px;background:#1f2937;border-radius:6px;overflow:hidden}
+    .bar{height:100%;background:#22c55e;width:0%}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #334155;padding:.5rem;text-align:left}
+    th{background:#0f172a}
+    .flash{padding:.5rem 1rem;border-radius:8px;margin:.5rem 0}
+    .flash.error{background:#fee2e2;color:#7f1d1d}
+    .flash.success{background:#dcfce7;color:#14532d}
+  </style>
 </head>
 <body>
-<header>
-  <h1>Escaneo de Red / Dispositivo</h1>
-</header>
+<div class="container">
 
-<main>
-  <section>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+      <div class="flash {{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <header style="margin-bottom:1rem;">
+    <h1>Escaneo de Red / Dispositivo</h1>
+    <p class="muted">Lanza uno o varios escaneos en paralelo y sigue el progreso en tiempo real.</p>
+  </header>
+
+  <section class="card">
     <form method="post" action="{{ url_for('main.scan') }}">
-      <label for="target">IP o red:</label>
-      <input id="target" type="text" name="target" placeholder="192.168.1.0/24" required value="{{ target or '' }}">
+      <div class="row">
+        <div class="col">
+          <label for="target"><strong>IP / host / red</strong></label>
+          <input id="target" type="text" name="target" placeholder="192.168.1.0/24, 10.0.0.12, host.local" style="width:100%;padding:.6rem;border-radius:8px;border:1px solid #334155;background:#0b1020;color:#e5e7eb">
+          <p class="muted" style="margin:.25rem 0 0;">Para <code>nmap</code> es necesario indicar un objetivo. Para la enumeración local no es obligatorio.</p>
+        </div>
+        <div class="col">
+          <fieldset style="border:1px solid #334155;border-radius:8px;padding:.75rem;">
+            <legend class="muted">Herramientas (concurrentes)</legend>
+            <label style="display:block;margin:.25rem 0;">
+              <input type="checkbox" name="tools" value="local_enum" checked>
+              Enumeración local (rutas, DNS, sockets, permisos)
+            </label>
+            <label style="display:block;margin:.25rem 0;">
+              <input type="checkbox" name="tools" value="nmap">
+              Nmap (-sV) sobre el objetivo indicado
+            </label>
+            <!-- deja aquí espacio para futuras herramientas: masscan, dns-reverse, etc. -->
+          </fieldset>
+        </div>
+      </div>
 
-      <fieldset>
-        <legend>Opciones de Nmap</legend>
-        <label><input type="checkbox" name="opt_sS" {% if request.form.get('opt_sS') %}checked{% endif %}> -sS (SYN Scan) *</label>
-        <label><input type="checkbox" name="opt_sV" {% if request.form.get('opt_sV') %}checked{% endif %}> -sV (Service/Version)</label>
-        <label><input type="checkbox" name="opt_O"  {% if request.form.get('opt_O')  %}checked{% endif %}> -O (OS Detection) *</label>
-        <p class="note">* Requiere privilegios root</p>
-      </fieldset>
-
-      <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-        <button type="submit" class="btn">Iniciar Escaneo</button>
-        <button formaction="{{ url_for('main.analyze') }}" class="btn" title="Ejecuta también correlación y exportación">Analizar y correlacionar</button>
+      <div class="row" style="align-items:center; margin-top:.5rem;">
+        <div class="col" style="flex:0 0 auto;">
+          <button type="submit" class="btn">Iniciar escaneo</button>
+        </div>
+        <div class="col muted">Los resultados parciales se publican por eventos SSE.</div>
       </div>
     </form>
   </section>
 
-  {% if submitted %}
-  <section>
-    <h2>Resultados</h2>
+  <section class="card">
+    <h2 style="margin-top:0;">Trabajos recientes</h2>
 
-    {% if meta %}
-      <div class="card" style="margin-bottom:1rem;">
-        <p class="note"><strong>Comando:</strong> <code>{{ meta.cmd }}</code></p>
-        {% if meta.stderr %}
-          <p class="note" style="color:#fca5a5;"><strong>STDERR:</strong> {{ meta.stderr }}</p>
-        {% endif %}
-      </div>
+    {% if jobs and jobs|length > 0 %}
+      <table id="jobs-table">
+        <thead>
+          <tr>
+            <th>Job</th>
+            <th>Estado</th>
+            <th>Progreso</th>
+            <th>Herramientas</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for j in jobs|reverse %}
+          <tr id="row-{{ j.id }}">
+            <td><code>{{ j.id[:8] }}</code></td>
+            <td id="status-{{ j.id }}">{{ j.status }}</td>
+            <td style="min-width:180px;">
+              <div class="progress"><div id="bar-{{ j.id }}" class="bar" style="width: {{ j.progress }}%"></div></div>
+              <small id="pct-{{ j.id }}" class="muted">{{ j.progress }}%</small>
+            </td>
+            <td>{{ j.tools|join(", ") }}</td>
+            <td>
+              <a class="btn" href="{{ url_for('main.job_detail', job_id=j.id) }}">Detalle</a>
+              {% if j.report_file %}
+                <a class="btn" href="{{ url_for('get_report', name=j.report_file) }}">Informe</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No hay trabajos aún. Lanza el primero con el formulario de arriba.</p>
     {% endif %}
+  </section>
 
-    {% if results and results|length > 0 %}
-      <div class="cards">
-        {% for device in results %}
-        <div class="card">
-          <h3>{{ device.ip }}{% if device.hostname %} <span class="muted">({{ device.hostname }})</span>{% endif %}</h3>
-          <p><strong>OS:</strong> {{ device.os or 'Desconocido' }}</p>
-
-          <div class="table-wrap">
-            <h4>Puertos abiertos</h4>
-            <table>
-              <thead>
-                <tr>
-                  <th>Puerto</th>
-                  <th>Proto</th>
-                  <th>Estado</th>
-                  <th>Servicio</th>
-                  <th>Producto / Versión</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% if device.ports and device.ports|length > 0 %}
-                  {% for p in device.ports %}
-                  <tr>
-                    <td>{{ p.port }}</td>
-                    <td>{{ p.proto }}</td>
-                    <td><span class="state {{ 'open' if p.state == 'open' else 'other' }}">{{ p.state }}</span></td>
-                    <td>{{ p.service or '' }}</td>
-                    <td>
-                      {% set pv = ((p.product or '') ~ ' ' ~ (p.version or ''))|trim %}
-                      {{ pv if pv else '—' }}
-                    </td>
-                  </tr>
-                  {% endfor %}
-                {% else %}
-                  <tr><td colspan="5" class="muted">No se encontraron puertos abiertos.</td></tr>
-                {% endif %}
-              </tbody>
-            </table>
-          </div>
-        </div>
+  <section class="card">
+    <h2 style="margin-top:0;">Reportes generados</h2>
+    {% if reports and reports|length > 0 %}
+      <ul style="list-style:none;padding-left:0;">
+        {% for r in reports %}
+          <li style="margin:.25rem 0;">
+            <a class="btn" href="{{ url_for('get_report', name=r.name) }}">{{ r.name }}</a>
+            <small class="muted"> — {{ r.path }}</small>
+          </li>
         {% endfor %}
-      </div>
+      </ul>
     {% else %}
-      <div class="card"><p>No se encontraron hosts activos o puertos abiertos para {{ target }}.</p></div>
-    {% endif %}
-  </section>
-  {% endif %}
-
-  {% if findings is defined %}
-  <section>
-    <h2>Hallazgos correlacionados</h2>
-    {% if findings|length == 0 %}
-      <div class="card"><p class="muted">No se detectaron hallazgos correlacionados en esta ejecución.</p></div>
-    {% else %}
-      <div class="cards">
-      {% for f in findings %}
-        <div class="card">
-          <h3>{{ f.classification.tag }} <span class="muted">({{ f.risk.sev|upper }})</span></h3>
-          <p><strong>Host ID:</strong> {{ f.host_id }}</p>
-          <p><strong>Ámbito:</strong> {{ f.scope }}</p>
-          <p><strong>Evidencia:</strong> {{ f.evidence }}</p>
-          <p><strong>Recomendación:</strong> {{ f.recommendation }}</p>
-          <p class="note"><strong>Fuente:</strong> {{ f.source_module }} — {{ f.timestamp }}</p>
-        </div>
-      {% endfor %}
-      </div>
+      <p class="muted">Aún no hay reportes. Aparecerán aquí al finalizar los jobs.</p>
     {% endif %}
   </section>
 
-  <section>
-    <h2>Exportaciones</h2>
-    <div class="card">
-      <h3>assets.jsonl</h3>
-      <pre style="white-space:pre-wrap; max-height:240px; overflow:auto;">{{ assets_jsonl }}</pre>
-    </div>
-    <div class="card">
-      <h3>findings.jsonl</h3>
-      <pre style="white-space:pre-wrap; max-height:240px; overflow:auto;">{{ findings_jsonl }}</pre>
-    </div>
-    <div class="card">
-      <h3>Detalles del sistema local (enum)</h3>
-      <pre style="white-space:pre-wrap; max-height:240px; overflow:auto;">{{ local_facts | tojson(indent=2) }}</pre>
-    </div>
-  </section>
-  {% endif %}
-</main>
+</div>
 
-<footer>
-  <p>© 2025 NetarchDiscovery</p>
-</footer>
+<!-- SSE para refrescar la tabla de trabajos en vivo -->
+<script>
+(function(){
+  // Suscripción global a eventos (todos los jobs)
+  const src = new EventSource("{{ url_for('main.events') }}");
+
+  function setProgress(jobId, pct){
+    const bar = document.getElementById("bar-"+jobId);
+    const txt = document.getElementById("pct-"+jobId);
+    if(bar){ bar.style.width = (pct|0)+"%"; }
+    if(txt){ txt.textContent = (pct|0)+"%"; }
+  }
+  function setStatus(jobId, status){
+    const el = document.getElementById("status-"+jobId);
+    if(el){ el.textContent = status; }
+  }
+  function ensureRow(job){
+    // Si llega un evento de un job que no está pintado (otra pestaña lo lanzó), lo añadimos.
+    let row = document.getElementById("row-"+job.id);
+    if(row) return;
+    const tbody = document.querySelector("#jobs-table tbody");
+    if(!tbody) return;
+    row = document.createElement("tr");
+    row.id = "row-"+job.id;
+    row.innerHTML = `
+      <td><code>${job.id.slice(0,8)}</code></td>
+      <td id="status-${job.id}">${job.status || "running"}</td>
+      <td style="min-width:180px;">
+        <div class="progress"><div id="bar-${job.id}" class="bar" style="width:${job.progress||0}%"></div></div>
+        <small id="pct-${job.id}" class="muted">${job.progress||0}%</small>
+      </td>
+      <td>${(job.tools||[]).join(", ")}</td>
+      <td>
+        <a class="btn" href="{{ url_for('main.job_detail', job_id='__ID__') }}".replace("__ID__", job.id)>Detalle</a>
+      </td>`;
+    tbody.prepend(row);
+  }
+
+  src.addEventListener("status", e => {
+    try{
+      const d = JSON.parse(e.data);
+      // d: {status, report?}
+      // el meta con job_id viene en el canal; lo extraemos del último evento de replay
+      // aquí no tenemos el job_id → lo tomamos de 'event' personalizado en servidor? Depende de tu implementación:
+      // en esta plantilla asumimos que el servidor emite también un campo 'job_id' en payload si se necesita.
+    }catch(_){}
+  });
+
+  src.addEventListener("progress", e => {
+    try{
+      const d = JSON.parse(e.data);         // {progress: 0..100}
+      const id = (e.lastEventId || "").trim();
+      // En caso de que tu backend no use lastEventId, añade job_id en el payload de progress/status/log.
+      const jobId = d.job_id || id || (d.meta && d.meta.job_id);
+      if(!jobId) return;
+      ensureRow({id: jobId, status: "running", progress: d.progress, tools: []});
+      setProgress(jobId, d.progress);
+    }catch(_){}
+  });
+
+  src.addEventListener("log", e => {
+    // No hace falta pintar logs en el listado; se verán en /jobs/<id>.
+  });
+
+  // Si tu backend envia 'partial_result' y 'finished' con job_id en el payload:
+  src.addEventListener("finished", e => {
+    try{
+      const d = JSON.parse(e.data);
+      const jobId = d.job_id || (d.meta && d.meta.job_id);
+      if(jobId){
+        setStatus(jobId, "done");
+        setProgress(jobId, 100);
+      }
+    }catch(_){}
+  });
+})();
+</script>
 </body>
 </html>
+>

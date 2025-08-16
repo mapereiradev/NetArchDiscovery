@@ -1,9 +1,9 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
-from app.routes.nmap import caller, parser
-from app.modules.acquisition.nmap_acq import scan_network_or_host
-from app.modules.local.linux_enum import collect_local_facts
-from app.modules.correlation.rules import correlate
-from app.modules.reporting.export import assets_to_jsonl, findings_to_jsonl
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, Response
+import json
+from app.job_manager import EVENT_BUS   # para SSE
+import queue
+from flask import send_from_directory
+from pathlib import Path
 
 main = Blueprint("main", __name__)
 
@@ -11,88 +11,98 @@ main = Blueprint("main", __name__)
 def index():
     return render_template("index.html")
 
-@main.route("/scan", methods=["GET", "POST"])
+
+@main.route("/scanning", methods=["GET"])
+def scanning():
+    jm = current_app.jobmanager
+    jobs = jm.list_jobs()
+    # tu plantilla original "scanning.html" (MISMO diseño)
+    return render_template("scanning.html", jobs=jobs)
+
+@main.route("/scan", methods=["POST"])
 def scan():
-    if request.method == "GET":
-        return render_template("scanning.html")
+    jm = current_app.jobmanager
 
+    # Datos del formulario
     target = (request.form.get("target") or "").strip()
-    if not target:
-        flash("Debe indicar una IP o rango.", "error")
-        return redirect(url_for("main.scan"))
+    tools = request.form.getlist("tools") or []
 
-    options = []
-    if request.form.get("opt_sS"):  # -sS requiere root
-        options.append("-sS")
-    if request.form.get("opt_sV"):
-        options.append("-sV")
-    if request.form.get("opt_O"):   # -O requiere root
-        options.append("-O")
+    # Validaciones mínimas
+    if not tools:
+        flash("Selecciona al menos una herramienta.", "error")
+        return redirect(url_for("main.index"))
 
+    if "nmap" in tools and not target:
+        flash("Debes indicar un target para ejecutar Nmap.", "error")
+        return redirect(url_for("main.index"))
+
+    # Lanzar job concurrente
     try:
-      xml_output, meta = caller.run_nmap(target, options)
-      if not xml_output:
-          flash(f"Error ejecutando nmap: {meta.get('stderr','')}", "error")
-          return redirect(url_for("main.scan"))
+        job_id = jm.enqueue(target=target, tools=tools, meta={"ui": "original"})
+        flash(f"Job {job_id[:8]} lanzado.", "success")
+        return redirect(url_for("main.job_detail", job_id=job_id))
+    except Exception as ex:
+        current_app.logger.exception("Error al encolar job")
+        flash(f"Error al lanzar el job: {ex}", "error")
+        return redirect(url_for("main.index"))
 
-      results = parser.parse_nmap_xml(xml_output)
-      return render_template(
-          "scanning.html",
-          results=results,
-          submitted=True,
-          target=target,
-          options=" ".join(options),
-          meta=meta
-      )
+@main.route("/jobs/<job_id>")
+def job_detail(job_id):
+    jm = current_app.jobmanager
+    job = jm.get(job_id)
+    if not job:
+        flash("Job no encontrado", "error")
+        return redirect(url_for("main.index"))
+    # crea una plantilla job.html con tu estilo (abajo te doy solo el JS)
+    return render_template("job.html", job=job)
 
-    except Exception as e:
-        flash(f"Error ejecutando nmap: {e}", "error")
-        return redirect(url_for("main.scan"))
+@main.route("/events")
+def events():
+    job_filter = request.args.get("job_id")
 
-@main.route("/analyze", methods=["POST"])
-def analyze():
-    """
-    Flujo integrado: Nmap -> Enum local -> Correlación -> Export
-    """
-    target = (request.form.get("target") or "").strip()
-    if not target:
-        flash("Debe indicar una IP o rango.", "error")
-        return redirect(url_for("main.scan"))
+    # 🔧 CAPTURA referencias ANTES de crear el Response/generador:
+    app_obj = current_app._get_current_object()
+    jm = app_obj.jobmanager
 
-    options = []
-    if request.form.get("opt_sS"):
-        options.append("-sS")
-    if request.form.get("opt_sV"):
-        options.append("-sV")
-    if request.form.get("opt_O"):
-        options.append("-O")
+    def stream():
+        q = EVENT_BUS.subscribe()
+        try:
+            # Replay inicial (opcional)
+            if job_filter:
+                job = jm.get(job_filter)
+                if job:
+                    for e in job.events[-50:]:
+                        yield f"event: {e.kind}\ndata: {json.dumps(e.payload, ensure_ascii=False)}\n\n"
 
-    # 1) Adquisición
-    assets, meta = scan_network_or_host(target, options)
+            # Bucle principal
+            while True:
+                try:
+                    # Espera con timeout para poder emitir keep-alive
+                    e = q.get(timeout=15)
+                    if job_filter and e.meta.get("job_id") != job_filter:
+                        continue
+                    yield f"event: {e.kind}\ndata: {json.dumps(e.payload, ensure_ascii=False)}\n\n"
+                except queue.Empty:
+                    # 🔸 Mantén viva la conexión (útil con proxies)
+                    yield ": keep-alive\n\n"
+        finally:
+            EVENT_BUS.unsubscribe(q)
 
-    # 2) Análisis local
-    local_facts = collect_local_facts()
+    headers = {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        # Opcional en dev: desactiva buffering en algunos proxies/NGINX
+        # "X-Accel-Buffering": "no",
+    }
+    return Response(stream(), headers=headers)
 
-    # 3) Correlación
-    findings = correlate(assets, local_facts)
-
-    # 4) Export
-    assets_jsonl = assets_to_jsonl(assets)
-    findings_jsonl = findings_to_jsonl(findings)
-
-    # Además, mostrar también los resultados "bonitos" usando el parser original para la tabla de puertos
-    xml_output, _ = caller.run_nmap(target, options)
-    pretty_results = parser.parse_nmap_xml(xml_output)
-
-    return render_template(
-        "scanning.html",
-        results=pretty_results,
-        submitted=True,
-        target=target,
-        options=" ".join(options),
-        meta=meta,
-        findings=findings,
-        assets_jsonl=assets_jsonl,
-        findings_jsonl=findings_jsonl,
-        local_facts=local_facts
-    )
+@main.route("/reports/<name>")
+def get_report(name):
+    # informes en reports/output
+    base = Path("reports/output").resolve()
+    f = (base / name).resolve()
+    if not str(f).startswith(str(base)) or not f.exists():
+        flash("Reporte no encontrado", "error")
+        return redirect(url_for("main.index"))
+    return send_from_directory(str(base), f.name)

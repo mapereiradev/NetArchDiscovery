@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NetArchDiscovery</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    /* mínimos por si tu CSS no los define */
+    .container{max-width:1100px;margin:0 auto;padding:1rem}
+    .card{border:1px solid #334155;border-radius:10px;padding:1rem;background:#0b1020;margin:1rem 0}
+    .flash{padding:.5rem 1rem;border-radius:8px;margin:.5rem 0}
+    .flash.error{background:#fee2e2;color:#7f1d1d}
+    .flash.success{background:#dcfce7;color:#14532d}
+  </style>
+</head>
+<header>
+    <h1>NetarchDiscovery</h1>
+    <p>Herramienta de descubrimiento y escaneo de redes</p>
+</header>
+<body>
+  <div class="container">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in msgs %}
+        <div class="flash {{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

@@ -1,0 +1,116 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Job {{ job.id[:8] }}</h1>
+<p>
+  Estado: <strong id="status">{{ job.status }}</strong> —
+  Progreso: <strong id="progress">{{ job.progress }}%</strong>
+</p>
+
+<!-- Logs en vivo -->
+<div class="card" id="log"><h3>Logs</h3></div>
+
+<!-- ===== Enumeración local ===== -->
+<div class="card">
+  <h3>Enumeración local</h3>
+  {% if job.results.local_enum %}
+    {% set le = job.results.local_enum %}
+
+    <h4>Usuarios del sistema</h4>
+    {% if le.users %}
+      <pre style="white-space:pre-wrap">{{ le.users | join('\n') }}</pre>
+    {% else %}
+      <p class="muted">No se han podido listar usuarios.</p>
+    {% endif %}
+
+    <h4>Binarios con SUID (muestra)</h4>
+    {% if le.suid_bins %}
+      <pre style="white-space:pre-wrap">{{ le.suid_bins | join('\n') }}</pre>
+    {% else %}
+      <p class="muted">No se han encontrado binarios SUID en la muestra.</p>
+    {% endif %}
+
+    <h4>Configuración de SSH (/etc/ssh/sshd_config)</h4>
+    {% if le.ssh_config %}
+      <pre style="white-space:pre-wrap">{{ le.ssh_config }}</pre>
+    {% else %}
+      <p class="muted">No se encontró <code>/etc/ssh/sshd_config</code> o no se pudo leer.</p>
+    {% endif %}
+
+    <details style="margin-top:.5rem">
+      <summary>Ver JSON completo de enumeración local</summary>
+      <pre>{{ le | tojson(indent=2) }}</pre>
+    </details>
+  {% else %}
+    <p class="muted">Este job no ejecutó enumeración local.</p>
+  {% endif %}
+</div>
+
+<!-- ===== Resultados Nmap (si existen) ===== -->
+<div class="card">
+  <h3>Resultados Nmap</h3>
+  {% if job.results.nmap and job.results.nmap.assets %}
+    <table>
+      <thead>
+        <tr>
+          <th>IP</th><th>Hostname</th><th>SO</th><th>Puerto</th><th>Servicio</th><th>Versión</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for host in job.results.nmap.assets %}
+          {% for port in host.ports %}
+          <tr>
+            <td>{{ host.ip }}</td>
+            <td>{{ host.hostname }}</td>
+            <td>{{ host.os or '' }}</td>
+            <td>{{ port.port }}/{{ port.proto if port.proto is defined else 'tcp' }}</td>
+            <td>{{ port.service }}</td>
+            <td>{{ (port.product ~ ' ' ~ port.version).strip() if port.product is defined else '' }}</td>
+          </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Sin resultados de Nmap.</p>
+  {% endif %}
+</div>
+
+<!-- Enlace a informe si tu JobManager lo establece -->
+<div class="card" id="report_link">
+  {% if job.report_file %}
+    <a class="btn" href="{{ url_for('get_report', name=job.report_file) }}">Abrir informe</a>
+  {% else %}
+    <span class="muted">El informe aparecerá aquí al finalizar.</span>
+  {% endif %}
+</div>
+
+<script>
+  // SSE para este job
+  const src = new EventSource("{{ url_for('main.events') }}?job_id={{ job.id }}");
+
+  src.addEventListener("progress", e => {
+    const d = JSON.parse(e.data);           // { progress, job_id }
+    if (typeof d.progress === "number") {
+      document.getElementById("progress").textContent = `${d.progress}%`;
+    }
+  });
+
+  src.addEventListener("status", e => {
+    const d = JSON.parse(e.data);           // { status, report?, job_id }
+    if (d.status) {
+      document.getElementById("status").textContent = d.status;
+    }
+    if (d.report) {
+      const box = document.getElementById("report_link");
+      box.innerHTML = `<a class="btn" href="/reports/${d.report}">Abrir informe</a>`;
+    }
+  });
+
+  src.addEventListener("log", e => {
+    const d = JSON.parse(e.data);           // { tool, msg, job_id }
+    const pre = document.createElement("pre");
+    pre.textContent = `[${d.tool}] ` + (typeof d.msg === "string" ? d.msg : JSON.stringify(d.msg));
+    document.getElementById("log").appendChild(pre);
+  });
+</script>
+{% endblock %}
