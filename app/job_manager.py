@@ -1,127 +1,192 @@
-import queue, threading, uuid
+from __future__ import annotations
+
+import uuid
+import queue
+import threading
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Dict, List, Optional, Tuple
 
-# tus plugins: usa los que ya tenemos (nmap + enum local) o los que vayas añadiendo
-from .plugins import get_available_tools
-from app.reports.report_builder import build_html
-from app.modules.reporting.export import export_results
+# Registro de plugins (nmap, local_enum, etc.)
+from app.plugins import get_available_tools
+
+# Exportadores (JSONL + HTML) y correlación (invocada desde export_to_html)
+from app.modules.reporting.export import export_to_jsonl, export_to_html
 
 
-# ——— bus de eventos para SSE ———
+# =========================
+#   Infra de eventos (SSE)
+# =========================
+
 class Event:
-    def __init__(self, kind, payload, meta=None):
+    """Evento simple para publicar en el bus y reemitir por SSE."""
+    def __init__(self, kind: str, payload: dict, meta: Optional[dict] = None):
         self.kind = kind
         self.payload = payload
         self.meta = meta or {}
 
+
 class EventBus:
-    def __init__(self):
-        self.subs = set()
+    """Bus en memoria; cada suscriptor recibe una Queue con eventos."""
+    def __init__(self) -> None:
+        self.subs: set[queue.Queue] = set()
         self.lock = threading.Lock()
-    def subscribe(self):
-        q = queue.Queue()
-        with self.lock: self.subs.add(q)
+
+    def subscribe(self) -> queue.Queue:
+        q: queue.Queue = queue.Queue()
+        with self.lock:
+            self.subs.add(q)
         return q
-    def unsubscribe(self, q):
-        with self.lock: self.subs.discard(q)
-    def publish(self, event: Event):
-        with self.lock: subs = list(self.subs)
+
+    def unsubscribe(self, q: queue.Queue) -> None:
+        with self.lock:
+            self.subs.discard(q)
+
+    def publish(self, event: Event) -> None:
+        with self.lock:
+            subs = list(self.subs)
         for q in subs:
-            try: q.put(event, block=False)
-            except queue.Full: pass
+            try:
+                q.put(event, block=False)
+            except queue.Full:
+                pass
+
 
 EVENT_BUS = EventBus()
 
-# ——— modelo de job ———
+
+# =========================
+#   Modelo de Job
+# =========================
+
 @dataclass
 class Job:
     id: str
     target: str
-    tools: list[str]
+    tools: List[str]
     status: str = "queued"
     progress: int = 0
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat()+"Z")
-    results: dict = field(default_factory=dict)
-    errors: dict = field(default_factory=dict)
-    events: list = field(default_factory=list)  # replay en SSE
-    report_file: str | None = None
-    meta: dict = field(default_factory=dict)
-    def to_dict(self):
-        d = asdict(self); d["events"] = d["events"][-100:]; return d
+    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    results: Dict[str, Any] = field(default_factory=dict)
+    errors: Dict[str, str] = field(default_factory=dict)
+    events: List[Event] = field(default_factory=list)  # replay breve para SSE
+    report_file: Optional[str] = None
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = asdict(self)
+        # No “inundar” con eventos: deja solo los últimos 100
+        d["events"] = [{"kind": e.kind, "payload": e.payload, "meta": e.meta} for e in self.events[-100:]]
+        return d
+
+
+# =========================
+#   Gestor de Jobs
+# =========================
 
 class JobManager:
-    def __init__(self, max_workers=4, report_dir="reports/output"):
+    def __init__(self, max_workers: int = 4, report_dir: str = "reports/output") -> None:
         self.max_workers = max_workers
         self.report_dir = report_dir
-        self.jobs: dict[str, Job] = {}
+        self.jobs: Dict[str, Job] = {}
         self.lock = threading.Lock()
 
-    def list_jobs(self):
-        with self.lock: return list(self.jobs.values())
+    # -------- API pública --------
+    def list_jobs(self) -> List[Job]:
+        with self.lock:
+            return list(self.jobs.values())
 
-    def get(self, job_id):
-        with self.lock: return self.jobs.get(job_id)
+    def get(self, job_id: str) -> Optional[Job]:
+        with self.lock:
+            return self.jobs.get(job_id)
 
-    def enqueue(self, *, target: str, tools: list[str], meta=None) -> str:
+    def enqueue(self, *, target: str, tools: List[str], meta: Optional[Dict[str, Any]] = None) -> str:
         job_id = uuid.uuid4().hex
         job = Job(id=job_id, target=target, tools=tools, meta=meta or {})
-        with self.lock: self.jobs[job_id] = job
+        with self.lock:
+            self.jobs[job_id] = job
         threading.Thread(target=self._run_job, args=(job,), daemon=True).start()
         return job_id
 
-    def _emit(self, job: Job, kind: str, payload: dict):
+    # -------- Internals --------
+    def _emit(self, job: Job, kind: str, payload: Dict[str, Any]) -> None:
+        """Publica un evento y lo guarda para replay. Añade siempre job_id."""
+        payload.setdefault("job_id", job.id)
         e = Event(kind, payload, meta={"job_id": job.id})
         job.events.append(e)
         EVENT_BUS.publish(e)
 
-    def _run_tool(self, name: str, job: Job):
-        runner = get_available_tools()[name]
+    def _run_tool(self, name: str, job: Job) -> Tuple[str, Any]:
+        """Ejecuta un plugin/tool concreto y devuelve (nombre, salida)."""
+        registry = get_available_tools()
+        if name not in registry:
+            raise RuntimeError(f"Tool no registrada: {name}")
+        runner = registry[name]
+
         self._emit(job, "log", {"tool": name, "msg": "inicio"})
-        out = runner(job.target, emit=lambda m: self._emit(job, "log", {"tool": name, "msg": m}))
+        # Pasamos meta al plugin (p.ej., opts de nmap)
+        out = runner(
+            job.target,
+            emit=lambda m: self._emit(job, "log", {"tool": name, "msg": m}),
+            meta=job.meta,
+        )
         self._emit(job, "log", {"tool": name, "msg": "fin"})
         return name, out
 
-def _run_job(self, job: Job):
-    job.status = "running"
-    self._emit(job, "status", {"status": job.status})
-    results, errors = {}, {}
-    total = max(1, len(job.tools))
+    def _run_job(self, job: Job) -> None:
+        job.status = "running"
+        # Incluye herramientas en el primer status para UI
+        self._emit(job, "status", {"status": job.status, "tools": job.tools})
 
-    with ThreadPoolExecutor(max_workers=min(total, self.max_workers)) as pool:
-        futures = [pool.submit(self._run_tool, t, job) for t in job.tools]
+        results: Dict[str, Any] = {}
+        errors: Dict[str, str] = {}
+
+        total = max(1, len(job.tools))
         done = 0
-        for f in as_completed(futures):
-            try:
-                k, v = f.result()
-                results[k] = v
-            except Exception as ex:
-                errors[k if 'k' in locals() else "unknown"] = str(ex)
-                self._emit(job, "log", {
-                    "tool": k if 'k' in locals() else "unknown",
-                    "msg": f"ERROR: {ex}"
-                })
-            done += 1
-            job.progress = int(done * 100 / total)
-            self._emit(job, "progress", {"progress": job.progress})
 
-    # Guardar resultados y errores en el job
-    job.results, job.errors = results, errors
+        # Ejecuta todas las herramientas del job en paralelo
+        with ThreadPoolExecutor(max_workers=min(total, self.max_workers)) as pool:
+            futures = [pool.submit(self._run_tool, t, job) for t in job.tools]
 
-    # 🔹 Exportar resultados a JSONL (assets + findings)
-    try:
-        export_results(job, results)
-        self._emit(job, "log", {"tool": "export", "msg": "Resultados exportados a JSONL"})
-    except Exception as ex:
-        self._emit(job, "log", {"tool": "export", "msg": f"Error exportando a JSONL: {ex}"})
+            for f in as_completed(futures):
+                try:
+                    k, v = f.result()
+                    results[k] = v
+                except Exception as ex:
+                    # En caso de error, intenta recuperar el nombre de la tool
+                    try:
+                        k = f.__getattribute__("tool_name")  # normalmente no está
+                    except Exception:
+                        k = "unknown"
+                    errors[k] = str(ex)
+                    self._emit(job, "log", {"tool": k, "msg": f"ERROR: {ex}"})
+                finally:
+                    done += 1
+                    job.progress = int(done * 100 / total)
+                    self._emit(job, "progress", {"progress": job.progress})
 
-    # 🔹 Generar informe HTML
-    try:
-        filename = build_html(job)
-        job.report_file = filename
-        self._emit(job, "status", {"status": "done", "report": filename, "job_id": job.id})
-    except Exception as ex:
-        self._emit(job, "log", {"tool": "report", "msg": f"Error generando informe: {ex}", "job_id": job.id})
+        # Guardar resultados y errores
+        job.results, job.errors = results, errors
+
+        # Exportación a JSONL (no crítica)
+        try:
+            jsonl_name = export_to_jsonl(job)
+            self._emit(job, "log", {"tool": "export", "msg": f"JSONL: {jsonl_name}"})
+        except Exception as ex:
+            self._emit(job, "log", {"tool": "export", "msg": f"Error exportando a JSONL: {ex}"})
+
+        # Informe HTML (incluye correlación dentro de export_to_html)
+        report_name: Optional[str] = None
+        try:
+            report_name = export_to_html(job)
+            job.report_file = report_name
+        except Exception as ex:
+            self._emit(job, "log", {"tool": "report", "msg": f"Error generando informe: {ex}"})
+
+        # Estado final (se emite UNA sola vez)
         job.status = "done"
-        self._emit(job, "status", {"status": "done", "job_id": job.id})
+        payload = {"status": job.status}
+        if report_name:
+            payload["report"] = report_name
+        self._emit(job, "status", payload)

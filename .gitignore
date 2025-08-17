@@ -4,7 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.pyc
-*.p~ 
+*.p~
 
 # Virtualenv
 venv/
@@ -61,3 +61,6 @@ pnpm-debug.log
 # OS junk
 .DS_Store
 Thumbs.db
+
+#Ignore reports
+reports/

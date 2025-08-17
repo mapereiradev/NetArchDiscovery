@@ -4,13 +4,15 @@ from app.job_manager import EVENT_BUS   # para SSE
 import queue
 from flask import send_from_directory
 from pathlib import Path
+import os
+
+REPORT_DIR = Path("reports/output")
 
 main = Blueprint("main", __name__)
 
 @main.route("/", methods=["GET"])
 def index():
     return render_template("index.html")
-
 
 @main.route("/scanning", methods=["GET"])
 def scanning():
@@ -19,32 +21,27 @@ def scanning():
     # tu plantilla original "scanning.html" (MISMO diseño)
     return render_template("scanning.html", jobs=jobs)
 
-@main.route("/scan", methods=["POST"])
-def scan():
+@main.route("/api/scan", methods=["POST"])
+def api_scan():
     jm = current_app.jobmanager
-
-    # Datos del formulario
     target = (request.form.get("target") or "").strip()
     tools = request.form.getlist("tools") or []
 
-    # Validaciones mínimas
     if not tools:
-        flash("Selecciona al menos una herramienta.", "error")
-        return redirect(url_for("main.index"))
-
+        return {"error": "Debes seleccionar al menos una herramienta."}, 400
     if "nmap" in tools and not target:
-        flash("Debes indicar un target para ejecutar Nmap.", "error")
-        return redirect(url_for("main.index"))
+        return {"error": "Debes indicar un target para Nmap."}, 400
 
-    # Lanzar job concurrente
-    try:
-        job_id = jm.enqueue(target=target, tools=tools, meta={"ui": "original"})
-        flash(f"Job {job_id[:8]} lanzado.", "success")
-        return redirect(url_for("main.job_detail", job_id=job_id))
-    except Exception as ex:
-        current_app.logger.exception("Error al encolar job")
-        flash(f"Error al lanzar el job: {ex}", "error")
-        return redirect(url_for("main.index"))
+    # Construir opciones de Nmap (si está marcado)
+    nmap_opts = build_nmap_options(request.form) if "nmap" in tools else []
+
+    job_id = jm.enqueue(
+        target=target,
+        tools=tools,
+        meta={"ui": "original", "nmap_opts": nmap_opts}
+    )
+    # Respuesta para pintar fila de inmediato
+    return {"job_id": job_id, "target": target, "tools": tools, "nmap_opts": nmap_opts}
 
 @main.route("/jobs/<job_id>")
 def job_detail(job_id):
@@ -97,12 +94,75 @@ def events():
     }
     return Response(stream(), headers=headers)
 
-@main.route("/reports/<name>")
+# @main.route("/reports/<name>")
+# def get_report(name):
+#     # informes en reports/output
+#     base = Path("reports/output").resolve()
+#     f = (base / name).resolve()
+#     if not str(f).startswith(str(base)) or not f.exists():
+#         flash("Reporte no encontrado", "error")
+#         return redirect(url_for("main.index"))
+#     return send_from_directory(str(base), f.name)
+
+@main.route("/api/jobs/<job_id>")
+def api_job(job_id):
+    jm = current_app.jobmanager
+    job = jm.get(job_id)
+    if not job:
+        return {"error": "not found"}, 404
+    return job.to_dict()
+
+def build_nmap_options(form) -> list[str]:
+    """Lee el formulario y construye la lista de flags para Nmap."""
+    opts: list[str] = []
+
+    # Tipos de escaneo
+    if form.get("opt_sS"): opts.append("-sS")       # SYN
+    if form.get("opt_sT"): opts.append("-sT")       # TCP connect
+    if form.get("opt_sU"): opts.append("-sU")       # UDP
+
+    # Detección / fingerprint
+    if form.get("opt_sV"): opts.append("-sV")       # versiones
+    if form.get("opt_O"):  opts.append("-O")        # OS
+    if form.get("opt_A"):  opts.append("-A")        # -O -sV -sC --traceroute
+    if form.get("opt_sC"): opts.append("-sC")       # scripts por defecto
+    if form.get("opt_script_vuln"): opts.append("--script=vuln")  # scripts de vulns
+
+    # Puertos
+    ports = (form.get("opt_ports") or "").strip()
+    if ports:
+        opts += ["-p", ports]
+    if form.get("opt_F"):
+        opts.append("-F")                            # 100 puertos más comunes
+
+    # Timing
+    t = (form.get("opt_T") or "").strip()
+    if t != "":
+        try:
+            tval = int(t)
+            if 0 <= tval <= 5:
+                opts.append(f"-T{tval}")
+        except ValueError:
+            pass  # ignoramos valores inválidos
+
+    # DNS
+    if form.get("opt_n"):
+        opts.append("-n")                            # no resolver DNS
+
+    return opts
+
+
+@main.route("/reports/<path:name>")
 def get_report(name):
-    # informes en reports/output
-    base = Path("reports/output").resolve()
-    f = (base / name).resolve()
-    if not str(f).startswith(str(base)) or not f.exists():
-        flash("Reporte no encontrado", "error")
-        return redirect(url_for("main.index"))
-    return send_from_directory(str(base), f.name)
+    REPORT_DIR = Path("reports/output")
+    safe = os.path.normpath(name).replace("\\", "/")
+    if safe.startswith("../"):
+        return {"error": "invalid path"}, 400
+    return send_from_directory(REPORT_DIR, safe, as_attachment=False)
+
+@main.route("/api/reports")
+def api_reports():
+    REPORT_DIR = Path("reports/output")
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    files = sorted([f.name for f in REPORT_DIR.glob("*") if f.is_file()])
+    return {"files": files}

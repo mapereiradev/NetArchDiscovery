@@ -78,25 +78,44 @@
 <!-- Enlace a informe si tu JobManager lo establece -->
 <div class="card" id="report_link">
   {% if job.report_file %}
-    <a class="btn" href="{{ url_for('get_report', name=job.report_file) }}">Abrir informe</a>
+    <a class="btn" href="{{ url_for('main.get_report', name=job.report_file) }}">Abrir informe</a>
   {% else %}
     <span class="muted">El informe aparecerá aquí al finalizar.</span>
   {% endif %}
+  <div class="card">
+  <a class="btn" href="{{ url_for('main.api_job', job_id=job.id) }}" target="_blank">Descargar JSON del job</a>
 </div>
+
+
+{% if job.results.findings %}
+<div class="card">
+  <h3>Hallazgos</h3>
+  <ul>
+  {% for f in job.results.findings %}
+    <li>
+      <strong>{{ f.severity|upper }}</strong> — {{ f.title }}
+      <details><summary>Evidencia</summary><pre>{{ f.evidence | tojson(indent=2) }}</pre></details>
+    </li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<a href="/scanning">Volver</a>
 
 <script>
   // SSE para este job
   const src = new EventSource("{{ url_for('main.events') }}?job_id={{ job.id }}");
 
   src.addEventListener("progress", e => {
-    const d = JSON.parse(e.data);           // { progress, job_id }
+    const d = JSON.parse(e.data);
     if (typeof d.progress === "number") {
       document.getElementById("progress").textContent = `${d.progress}%`;
     }
   });
 
   src.addEventListener("status", e => {
-    const d = JSON.parse(e.data);           // { status, report?, job_id }
+    const d = JSON.parse(e.data);
     if (d.status) {
       document.getElementById("status").textContent = d.status;
     }
@@ -107,7 +126,7 @@
   });
 
   src.addEventListener("log", e => {
-    const d = JSON.parse(e.data);           // { tool, msg, job_id }
+    const d = JSON.parse(e.data);
     const pre = document.createElement("pre");
     pre.textContent = `[${d.tool}] ` + (typeof d.msg === "string" ? d.msg : JSON.stringify(d.msg));
     document.getElementById("log").appendChild(pre);
