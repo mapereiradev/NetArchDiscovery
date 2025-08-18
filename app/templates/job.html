@@ -45,6 +45,28 @@
   {% endif %}
 </div>
 
+<div class="card">
+  <h3>DNS inversa (PTR)</h3>
+  {% if job.results.dns_reverse and job.results.dns_reverse.ptrs %}
+    <table>
+      <thead><tr><th>IP</th><th>PTR</th><th>Aliases</th></tr></thead>
+      <tbody>
+        {% for r in job.results.dns_reverse.ptrs %}
+          <tr>
+            <td>{{ r.ip }}</td>
+            <td>{{ r.ptr }}</td>
+            <td>{{ (r.aliases or [])|join(', ') }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <small class="muted">{{ job.results.dns_reverse.count }} resultado(s)</small>
+  {% else %}
+    <p class="muted">Sin PTRs resueltos.</p>
+  {% endif %}
+</div>
+
+
 <!-- ===== Resultados Nmap (si existen) ===== -->
 <div class="card">
   <h3>Resultados Nmap</h3>

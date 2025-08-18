@@ -95,6 +95,10 @@
                 <!-- Resolución DNS -->
                 <label><input type="checkbox" name="opt_n"> -n (No resolver DNS)</label>
               </div>
+            <label style="display:block;margin:.25rem 0;">
+              <input type="checkbox" name="tools" value="dns_reverse">
+                DNS inversa (PTR) del target
+            </label>
             <!-- deja aquí espacio para futuras herramientas: masscan, dns-reverse, etc. -->
           </fieldset>
         </div>
@@ -169,247 +173,15 @@
 </div>
 
 <script>
-(function(){
-  /* === Plantillas de URL renderizadas por Jinja (con placeholders) === */
-  const REPORT_URL_TMPL     = "{{ url_for('main.get_report', name='__NAME__') }}";
-  const JOB_DETAIL_URL_TMPL = "{{ url_for('main.job_detail', job_id='__ID__') }}";
-
-  // ---- Toggling de opciones Nmap (con defensivos) ----
-  const nmapChk = document.getElementById("nmap");
-  const adv = document.getElementById("nmap_opciones_avanzadas");
-  if (nmapChk && adv){
-    const setAdv = () => adv.style.display = nmapChk.checked ? "block" : "none";
-    nmapChk.addEventListener("change", setAdv);
-    setAdv();
-  }
-  const pt = document.getElementById("opt_ports_toggle");
-  const ptBox = document.getElementById("ports_options");
-  if (pt && ptBox){
-    const setPorts = () => ptBox.style.display = pt.checked ? "block" : "none";
-    pt.addEventListener("change", setPorts);
-    setPorts();
-  }
-  const tt = document.getElementById("opt_timing_toggle");
-  const ttBox = document.getElementById("timing_options");
-  if (tt && ttBox){
-    const setTiming = () => ttBox.style.display = tt.checked ? "block" : "none";
-    tt.addEventListener("change", setTiming);
-    setTiming();
-  }
-
-  // ---- Helpers UI existentes ----
-  function setProgress(jobId, pct){
-    const bar = document.getElementById("bar-"+jobId);
-    const txt = document.getElementById("pct-"+jobId);
-    if(bar){ bar.style.width = (pct|0)+"%"; }
-    if(txt){ txt.textContent = (pct|0)+"%"; }
-  }
-  function setStatus(jobId, status){
-    const el = document.getElementById("status-"+jobId);
-    if(el){ el.textContent = status; }
-  }
-
-  // ---- NUEVO: crear la tabla si aún no existe (primer job) ----
-  function ensureJobsTable(){
-    let table = document.getElementById("jobs-table");
-    if (table) return table.tBodies[0];
-
-    // Busca la card de "Trabajos recientes" (es la segunda en tu layout)
-    const cards = document.querySelectorAll('section.card');
-    const jobsCard = cards[1] || document.body;
-
-    // Quita el <p> “No hay trabajos…” si existe
-    const emptyP = jobsCard.querySelector("p.muted");
-    if (emptyP) emptyP.remove();
-
-    // Crea la tabla
-    const wrapper = document.createElement("div");
-    wrapper.innerHTML = `
-      <table id="jobs-table">
-        <thead>
-          <tr>
-            <th>Job</th>
-            <th>Estado</th>
-            <th>Progreso</th>
-            <th>Herramientas</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>`;
-    jobsCard.appendChild(wrapper.firstElementChild);
-    return document.querySelector("#jobs-table tbody");
-  }
-
-  // ---- NUEVO: ensureRow que usa la tabla dinámica ----
-  function ensureRow(job){
-    const job_id = String(job.id);
-    let row = document.getElementById("row-"+job_id);
-
-    // Asegura que existe la tabla (la crea si falta)
-    const tbody = ensureJobsTable();
-    if (!tbody) return;
-
-    if (row) {
-      // si ya existe, actualiza herramientas si vinieron luego
-      const tc = document.getElementById("tools-"+job_id);
-      if (tc && job.tools && job.tools.length) tc.textContent = job.tools.join(", ");
-      return;
-    }
-
-    const detallesLink = JOB_DETAIL_URL_TMPL.replace("__ID__", encodeURIComponent(job_id));
-
-    row = document.createElement("tr");
-    row.id = "row-"+job_id;
-    row.innerHTML = `
-      <td><code>${job_id.slice(0,8)}</code></td>
-      <td id="status-${job_id}">${job.status || "running"}</td>
-      <td style="min-width:180px;">
-        <div class="progress"><div id="bar-${job_id}" class="bar" style="width:${job.progress||0}%"></div></div>
-        <small id="pct-${job_id}" class="muted">${job.progress||0}%</small>
-      </td>
-      <td id="tools-${job_id}">${(job.tools||[]).join(", ")}</td>
-      <td class="actions">
-        <a class="btn" href="${detallesLink}">Detalle</a>
-      </td>`;
-    tbody.prepend(row);
-  }
-
-  // ---- Enlaces de informe (fila + lista) ----
-  function addReportLink(jobId, reportName){
-    const row = document.getElementById("row-"+jobId);
-    if(!row) return;
-    const cell = row.querySelector("td.actions") || row.lastElementChild; // fallback
-    if(!cell) return;
-    if (cell.querySelector(`[data-report="${CSS.escape(reportName)}"]`)) return;
-    const a = document.createElement("a");
-    a.className = "btn";
-    a.href = REPORT_URL_TMPL.replace("__NAME__", encodeURIComponent(reportName));
-    a.textContent = "Informe";
-    a.setAttribute("data-report", reportName);
-    cell.appendChild(a);
-  }
-
-  function addReportToList(name){
-    const ul = document.getElementById("reports-list");
-    if(!ul) return;
-    if (ul.querySelector(`[data-report="${CSS.escape(name)}"]`)) return;
-    const li = document.createElement("li");
-    li.setAttribute("data-report", name);
-    li.innerHTML = `<a class="btn" target="_blank" href="${REPORT_URL_TMPL.replace("__NAME__", encodeURIComponent(name))}">${name}</a>`;
-    ul.prepend(li);
-  }
-
-  // ---- Carga inicial de informes ya existentes (opcional) ----
-  document.addEventListener("DOMContentLoaded", async () => {
-    const ul = document.getElementById("reports-list");
-    if(!ul) return;
-    try {
-      const res = await fetch("{{ url_for('main.api_reports') }}");
-      const data = await res.json();
-      (data.files || []).forEach(addReportToList);
-    } catch (_) {}
-  });
-
-  // ---- Normalizador para sacar job_id del evento ----
-  function getJobId(d, e){
-    // 1) del payload
-    if (d && d.job_id) return d.job_id;
-    // 2) de meta (compat)
-    if (d && d.meta && d.meta.job_id) return d.meta.job_id;
-    // 3) de lastEventId (si se usa)
-    const id = (e && e.lastEventId || "").trim();
-    return id || null;
-  }
-
-  /* === SSE global (tu bloque, con el extra de añadir reportes a la lista) === */
-  const src = new EventSource("{{ url_for('main.events') }}");
-
-  src.addEventListener("status", e => {
-    try{
-      const d = JSON.parse(e.data);
-      const jobId = getJobId(d, e);
-      if(!jobId) return;
-
-      ensureRow({id: jobId, status: d.status, progress: 0, tools: d.tools || []});
-      setStatus(jobId, d.status);
-      if (d.status === "done") setProgress(jobId, 100);
-
-      if (d.report){
-        addReportLink(jobId, d.report);
-        addReportToList(d.report);
-      }
-    }catch(_){}
-  });
-
-  src.addEventListener("progress", e => {
-    try{
-      const d = JSON.parse(e.data); // {progress, job_id}
-      const jobId = getJobId(d, e);
-      if(!jobId) return;
-      ensureRow({id: jobId, status: "running", progress: d.progress, tools: []});
-      setProgress(jobId, d.progress);
-    }catch(_){}
-  });
-
-  src.addEventListener("log", e => { /* logs no se muestran en listado */ });
-
-  src.addEventListener("finished", e => {
-    try{
-      const d = JSON.parse(e.data);
-      const jobId = getJobId(d, e);
-      if(jobId){
-        setStatus(jobId, "done");
-        setProgress(jobId, 100);
-      }
-    }catch(_){}
-  });
-
-  // ---- Envío AJAX del formulario para NO redirigir ----
-  const form = document.getElementById("scanForm");
-  if(form){
-    form.addEventListener("submit", async function(ev){
-      ev.preventDefault();
-
-      // desactiva botón mientras envía
-      const btn = form.querySelector('button[type="submit"]');
-      if (btn){ btn.disabled = true; btn.textContent = "Lanzando…"; }
-
-      try{
-        const fd = new FormData(form);
-        const res = await fetch(form.action, {
-          method: "POST",
-          body: fd,
-          credentials: "same-origin",
-          headers: { "X-Requested-With": "XMLHttpRequest" }
-        });
-
-        let data = null;
-        try { data = await res.json(); } catch { /* si viene HTML por error */ }
-
-        if(!res.ok || !data || !data.job_id){
-          const msg = (data && data.error) ? data.error : `Error al iniciar el escaneo (${res.status})`;
-          alert(msg);
-          return;
-        }
-
-        // pinta fila inicial; el SSE la seguirá actualizando
-        ensureRow({id: data.job_id, status: "running", progress: 0, tools: data.tools || []});
-
-        // resalta la fila recién creada
-        const row = document.getElementById("row-"+data.job_id);
-        if(row){ row.style.outline = "2px solid #60a5fa"; setTimeout(()=> row.style.outline="", 1200); }
-
-      }catch(err){
-        console.error(err);
-        alert("No se pudo lanzar el escaneo (conexión o servidor).");
-      }finally{
-        if (btn){ btn.disabled = false; btn.textContent = "Iniciar escaneo"; }
-      }
-    });
-  }
-})();
+  window.APP_ROUTES = {
+    EVENTS_URL: "{{ url_for('main.events') }}",
+    API_REPORTS_URL: "{{ url_for('main.api_reports') }}",
+    API_SCAN_URL: "{{ url_for('main.api_scan') }}",
+    JOB_DETAIL_URL_TMPL: "{{ url_for('main.job_detail', job_id='__ID__') }}",
+    REPORT_URL_TMPL: "{{ url_for('main.get_report', name='__NAME__') }}"
+  };
 </script>
+<script src="{{ url_for('static', filename='js/scanning.js') }}"></script>
 
 
 </body>

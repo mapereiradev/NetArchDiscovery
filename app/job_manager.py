@@ -3,20 +3,21 @@ from __future__ import annotations
 import uuid
 import queue
 import threading
+import inspect
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 
-# Registro de plugins (nmap, local_enum, etc.)
+# Registro de plugins (nmap, local_enum, dns_reverse, etc.)
 from app.plugins import get_available_tools
 
-# Exportadores (JSONL + HTML) y correlación (invocada desde export_to_html)
+# Exportadores (JSONL + HTML)
 from app.modules.reporting.export import export_to_jsonl, export_to_html
 
 
 # =========================
-#   Infra de eventos (SSE)
+#   Eventos y EventBus
 # =========================
 
 class Event:
@@ -70,14 +71,15 @@ class Job:
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     results: Dict[str, Any] = field(default_factory=dict)
     errors: Dict[str, str] = field(default_factory=dict)
-    events: List[Event] = field(default_factory=list)  # replay breve para SSE
+    events: List[Event] = field(default_factory=list)  # replay para SSE
     report_file: Optional[str] = None
     meta: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         # No “inundar” con eventos: deja solo los últimos 100
-        d["events"] = [{"kind": e.kind, "payload": e.payload, "meta": e.meta} for e in self.events[-100:]]
+        d["events"] = [{"kind": e.kind, "payload": e.payload, "meta": e.meta}
+                       for e in self.events[-100:]]
         return d
 
 
@@ -101,11 +103,22 @@ class JobManager:
         with self.lock:
             return self.jobs.get(job_id)
 
-    def enqueue(self, *, target: str, tools: List[str], meta: Optional[Dict[str, Any]] = None) -> str:
+    def enqueue(self, *, target: str, tools: List[str],
+                meta: Optional[Dict[str, Any]] = None) -> str:
+        """Crea el job, emite 'job_created' (para pintar fila instantánea) y lanza el hilo."""
         job_id = uuid.uuid4().hex
         job = Job(id=job_id, target=target, tools=tools, meta=meta or {})
         with self.lock:
             self.jobs[job_id] = job
+
+        # Aviso inmediato para la UI (aparece en tabla al pulsar el botón)
+        self._emit(job, "job_created", {
+            "job_id": job.id,
+            "status": job.status,
+            "tools": job.tools,
+            "progress": job.progress,
+        })
+
         threading.Thread(target=self._run_job, args=(job,), daemon=True).start()
         return job_id
 
@@ -125,19 +138,30 @@ class JobManager:
         runner = registry[name]
 
         self._emit(job, "log", {"tool": name, "msg": "inicio"})
-        # Pasamos meta al plugin (p.ej., opts de nmap)
-        out = runner(
-            job.target,
-            emit=lambda m: self._emit(job, "log", {"tool": name, "msg": m}),
-            meta=job.meta,
-        )
+
+        # Construimos kwargs y filtramos según la firma real del runner
+        candidate_kwargs = {
+            "emit": lambda m: self._emit(job, "log", {"tool": name, "msg": m}),
+            "meta": job.meta,
+            "target": job.target,  # por si algún runner declara 'target' como kw
+        }
+        sig = inspect.signature(runner)
+        kwargs = {k: v for k, v in candidate_kwargs.items() if k in sig.parameters}
+
+        # Si 'target' no está en kwargs, pásalo posicional
+        args = []
+        if "target" not in kwargs:
+            args.append(job.target)
+
+        out = runner(*args, **kwargs)
+
         self._emit(job, "log", {"tool": name, "msg": "fin"})
         return name, out
 
     def _run_job(self, job: Job) -> None:
         job.status = "running"
-        # Incluye herramientas en el primer status para UI
-        self._emit(job, "status", {"status": job.status, "tools": job.tools})
+        # Informa a la UI del arranque + herramientas del job
+        self._emit(job, "status", {"status": job.status, "tools": job.tools, "progress": 0})
 
         results: Dict[str, Any] = {}
         errors: Dict[str, str] = {}
@@ -147,20 +171,16 @@ class JobManager:
 
         # Ejecuta todas las herramientas del job en paralelo
         with ThreadPoolExecutor(max_workers=min(total, self.max_workers)) as pool:
-            futures = [pool.submit(self._run_tool, t, job) for t in job.tools]
+            futures = {pool.submit(self._run_tool, t, job): t for t in job.tools}
 
             for f in as_completed(futures):
+                tool_name = futures.get(f, "unknown")
                 try:
                     k, v = f.result()
                     results[k] = v
                 except Exception as ex:
-                    # En caso de error, intenta recuperar el nombre de la tool
-                    try:
-                        k = f.__getattribute__("tool_name")  # normalmente no está
-                    except Exception:
-                        k = "unknown"
-                    errors[k] = str(ex)
-                    self._emit(job, "log", {"tool": k, "msg": f"ERROR: {ex}"})
+                    errors[tool_name] = str(ex)
+                    self._emit(job, "log", {"tool": tool_name, "msg": f"ERROR: {ex}"})
                 finally:
                     done += 1
                     job.progress = int(done * 100 / total)
@@ -174,7 +194,10 @@ class JobManager:
             jsonl_name = export_to_jsonl(job)
             self._emit(job, "log", {"tool": "export", "msg": f"JSONL: {jsonl_name}"})
         except Exception as ex:
-            self._emit(job, "log", {"tool": "export", "msg": f"Error exportando a JSONL: {ex}"})
+            self._emit(job, "log", {
+                "tool": "export",
+                "msg": f"Error exportando a JSONL: {ex}"
+            })
 
         # Informe HTML (incluye correlación dentro de export_to_html)
         report_name: Optional[str] = None

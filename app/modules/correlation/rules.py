@@ -77,6 +77,22 @@ def run_rules(results: Dict[str, Any]) -> Dict[str, Any]:
             "title": "Servidores DNS configurados",
             "evidence": {"resolvers": externals[:5]},
         })
+        # ---- Regla 6: Hostname descubierto por PTR con puertos abiertos
+    ptrs = (results.get("dns_reverse") or {}).get("ptrs") or []
+    if nmap and ptrs:
+        ip_to_ptr = {p["ip"]: p.get("ptr") for p in ptrs if p.get("ptr")}
+        for h in _each_host(nmap):
+            ip = h.get("ip")
+            if not ip or ip not in ip_to_ptr:
+                continue
+            open_ports = [p for p in h.get("ports", []) if (p.get("state") in ("open", None))]
+            if open_ports:
+                findings.append({
+                    "id": "PTR-OPEN-PORTS",
+                    "severity": "info",
+                    "title": "Nombre descubierto por PTR con servicios abiertos",
+                    "evidence": {"ip": ip, "ptr": ip_to_ptr[ip], "ports": [p.get("port") for p in open_ports[:10]]},
+                })
+
 
     return {"findings": findings}
-s

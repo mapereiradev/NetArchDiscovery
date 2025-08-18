@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, Response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, Response, jsonify
 import json
 from app.job_manager import EVENT_BUS   # para SSE
 import queue
@@ -23,25 +23,25 @@ def scanning():
 
 @main.route("/api/scan", methods=["POST"])
 def api_scan():
-    jm = current_app.jobmanager
-    target = (request.form.get("target") or "").strip()
-    tools = request.form.getlist("tools") or []
-
-    if not tools:
-        return {"error": "Debes seleccionar al menos una herramienta."}, 400
-    if "nmap" in tools and not target:
-        return {"error": "Debes indicar un target para Nmap."}, 400
-
-    # Construir opciones de Nmap (si está marcado)
-    nmap_opts = build_nmap_options(request.form) if "nmap" in tools else []
-
-    job_id = jm.enqueue(
-        target=target,
-        tools=tools,
-        meta={"ui": "original", "nmap_opts": nmap_opts}
+    wants_json = (
+        "application/json" in (request.headers.get("Accept") or "")
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
     )
-    # Respuesta para pintar fila de inmediato
-    return {"job_id": job_id, "target": target, "tools": tools, "nmap_opts": nmap_opts}
+
+    target = (request.form.get("target") or "").strip()
+    tools  = request.form.getlist("tools")  # ["nmap", "local_enum", "dns_reverse", ...]
+
+    # crea + encola el job
+    jm  = current_app.jobmanager
+    job = jm.create_job(target=target, tools=tools)     # -> objeto Job con id
+    jm.start_job(job)                                   # -> lanza hilos/queue
+
+    if wants_json:
+        # respuesta inmediata para el fetch del front
+        return jsonify({"job_id": job.id, "tools": tools}), 200
+
+    # fallback navegador (si alguien envía sin AJAX)
+    return redirect(url_for("main.job_detail", job_id=job.id))
 
 @main.route("/jobs/<job_id>")
 def job_detail(job_id):
@@ -57,42 +57,75 @@ def job_detail(job_id):
 def events():
     job_filter = request.args.get("job_id")
 
-    # 🔧 CAPTURA referencias ANTES de crear el Response/generador:
+    # Captura referencias antes de crear el Response/generador
     app_obj = current_app._get_current_object()
     jm = app_obj.jobmanager
+
+    def _serialize(ev):
+        """Devuelve (kind, data_json, last_id) listo para enviar por SSE."""
+        kind = getattr(ev, "kind", "message")
+        meta = getattr(ev, "meta", {}) or {}
+        payload = (getattr(ev, "payload", {}) or {}).copy()
+        job_id = meta.get("job_id")
+        # garantiza job_id en payload
+        if job_id and "job_id" not in payload:
+            payload["job_id"] = job_id
+        data = json.dumps(payload, ensure_ascii=False)
+        last_id = job_id or ""  # útil para e.lastEventId en el cliente
+        return kind, data, last_id
 
     def stream():
         q = EVENT_BUS.subscribe()
         try:
-            # Replay inicial (opcional)
+            # Sugerencia: que el cliente reintente en 3s si se corta
+            yield "retry: 3000\n"
+            # Ping inicial para abrir el flujo en algunos proxies
+            yield ": ping\n\n"
+
+            # Replay de últimos eventos del job (si se pide)
             if job_filter:
                 job = jm.get(job_filter)
                 if job:
-                    for e in job.events[-50:]:
-                        yield f"event: {e.kind}\ndata: {json.dumps(e.payload, ensure_ascii=False)}\n\n"
+                    for ev in job.events[-50:]:
+                        kind, data, last_id = _serialize(ev)
+                        yield (f"id: {last_id}\n" if last_id else "")
+                        yield f"event: {kind}\n"
+                        yield f"data: {data}\n\n"
 
             # Bucle principal
             while True:
                 try:
-                    # Espera con timeout para poder emitir keep-alive
-                    e = q.get(timeout=15)
-                    if job_filter and e.meta.get("job_id") != job_filter:
-                        continue
-                    yield f"event: {e.kind}\ndata: {json.dumps(e.payload, ensure_ascii=False)}\n\n"
+                    ev = q.get(timeout=15)
                 except queue.Empty:
-                    # 🔸 Mantén viva la conexión (útil con proxies)
+                    # Mantén viva la conexión
                     yield ": keep-alive\n\n"
+                    continue
+
+                # Filtrado por job si procede
+                if job_filter:
+                    if not getattr(ev, "meta", None):
+                        continue
+                    if ev.meta.get("job_id") != job_filter:
+                        continue
+
+                kind, data, last_id = _serialize(ev)
+                if last_id:
+                    yield f"id: {last_id}\n"
+                yield f"event: {kind}\n"
+                yield f"data: {data}\n\n"
+
+        except GeneratorExit:
+            # cliente cerró la conexión
+            pass
         finally:
             EVENT_BUS.unsubscribe(q)
 
     headers = {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-transform",
         "Connection": "keep-alive",
-        # Opcional en dev: desactiva buffering en algunos proxies/NGINX
-        # "X-Accel-Buffering": "no",
+        "X-Accel-Buffering": "no",   # útil detrás de NGINX
     }
-    return Response(stream(), headers=headers)
+    return Response(stream(), mimetype="text/event-stream", headers=headers)
 
 # @main.route("/reports/<name>")
 # def get_report(name):
