@@ -108,6 +108,7 @@ class JobManager:
         """Crea el job, emite 'job_created' (para pintar fila instantánea) y lanza el hilo."""
         job_id = uuid.uuid4().hex
         job = Job(id=job_id, target=target, tools=tools, meta=meta or {})
+        setattr(job, "report_dir", self.report_dir)
         with self.lock:
             self.jobs[job_id] = job
 
@@ -121,6 +122,39 @@ class JobManager:
 
         threading.Thread(target=self._run_job, args=(job,), daemon=True).start()
         return job_id
+
+
+       # ----- Métodos añadidos para compatibilidad con la UI -----
+
+    def create_job(self, *, target: str, tools: List[str],
+                   meta: Optional[Dict[str, Any]] = None) -> Job:
+        """
+        Crea un objeto Job y lo registra en el gestor sin iniciarlo.
+        Devuelve la instancia de Job con un id único.
+        """
+        job_id = uuid.uuid4().hex
+        job = Job(id=job_id, target=target, tools=tools, meta=meta or {})
+        setattr(job, "report_dir", self.report_dir)
+        with self.lock:
+            self.jobs[job_id] = job
+        return job
+
+    def start_job(self, job: Job) -> None:
+        """
+        Arranca la ejecución de un job previamente creado.
+        Emite el evento 'job_created' y lanza la ejecución en un hilo.
+        """
+        # No reiniciar trabajos ya en curso o finalizados
+        if job.status != "queued":
+            return
+        # Aviso inmediato para la UI
+        self._emit(job, "job_created", {
+            "job_id": job.id,
+            "status": job.status,
+            "tools": job.tools,
+            "progress": job.progress,
+        })
+        threading.Thread(target=self._run_job, args=(job,), daemon=True).start()
 
     # -------- Internals --------
     def _emit(self, job: Job, kind: str, payload: Dict[str, Any]) -> None:

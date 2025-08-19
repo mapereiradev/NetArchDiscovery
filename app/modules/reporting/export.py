@@ -86,7 +86,8 @@ def export_to_html(job) -> str:
     html = html.replace("{{LOCAL}}", json.dumps(local_summary, indent=2, ensure_ascii=False))
     html = html.replace("{{JSON}}", json.dumps(job.results, indent=2, ensure_ascii=False))
 
-    out_dir = Path("reports/output"); out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(getattr(job, "report_dir", "reports/output"))
+    out_dir.mkdir(parents=True, exist_ok=True)
     name = f"report_{job.id}.html"
     (out_dir / name).write_text(html, encoding="utf-8")
     return name

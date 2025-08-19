@@ -187,15 +187,30 @@ def build_nmap_options(form) -> list[str]:
 
 @main.route("/reports/<path:name>")
 def get_report(name):
-    REPORT_DIR = Path("reports/output")
+    """
+    Sirve un informe HTML generado por un job.
+    Usamos el report_dir configurado en JobManager en lugar de asumir siempre
+    'reports/output'.
+    """
+    jm = current_app.jobmanager
+    # Si JobManager tiene configurado report_dir, lo usamos; si no, se usa 'reports/output'
+    report_dir = Path(jm.report_dir) if getattr(jm, "report_dir", None) else Path("reports/output")
+
     safe = os.path.normpath(name).replace("\\", "/")
+    # Evita rutas que escapen del directorio de informes
     if safe.startswith("../"):
         return {"error": "invalid path"}, 400
-    return send_from_directory(REPORT_DIR, safe, as_attachment=False)
+
+    return send_from_directory(report_dir, safe, as_attachment=False)
 
 @main.route("/api/reports")
 def api_reports():
-    REPORT_DIR = Path("reports/output")
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    files = sorted([f.name for f in REPORT_DIR.glob("*") if f.is_file()])
+    """
+    Devuelve la lista de informes disponibles.
+    Utiliza el mismo report_dir que JobManager para listar los archivos.
+    """
+    jm = current_app.jobmanager
+    report_dir = Path(jm.report_dir) if getattr(jm, "report_dir", None) else Path("reports/output")
+    report_dir.mkdir(parents=True, exist_ok=True)
+    files = sorted([f.name for f in report_dir.glob("*") if f.is_file()])
     return {"files": files}
