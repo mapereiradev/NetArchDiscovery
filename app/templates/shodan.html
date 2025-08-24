@@ -1,0 +1,143 @@
+{% extends "layout.html" %}
+{% block content %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shodan – Búsqueda | Suite TFM</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/shodan.css') }}">
+</head>
+<body>
+  <div class="container">
+    <div class="page-header">
+      <h1 style="margin:0;font-size:20px">🔎 Shodan – Búsqueda</h1>
+      <span id="pill" class="pill">0 resultados</span>
+    </div>
+
+    <div class="grid grid-2">
+      <section>
+        <div class="card">
+          <div class="card-header">Consulta</div>
+          <div class="card-body">
+            <form id="qform" class="grid" style="grid-template-columns:1fr auto; align-items:start;">
+              <textarea id="query" name="query" placeholder="Ej.: product:Apache OR port:80 country:ES">product:Apache</textarea>
+              <button id="go" class="btn" type="submit">Buscar</button>
+            </form>
+          </div>
+          <div id="status" class="status">Listo.</div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">Resultados</div>
+          <div class="card-body" style="padding:0">
+            <table id="results">
+              <thead>
+                <tr>
+                  <th>Título</th>
+                  <th>Hostnames</th>
+                  <th>Fecha</th>
+                  <th>Servidor</th>
+                  <th>HTTP Code</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <aside>
+        <div class="card">
+          <div class="card-header">JSON bruto</div>
+          <div class="card-body">
+            <div id="json" class="jsondump">Haz una búsqueda para ver el JSON devuelto…</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+<script>
+const $ = (q,ctx=document)=>ctx.querySelector(q);
+const resultsBody = $('#results tbody');
+const statusEl = $('#status');
+const pill = $('#pill');
+
+function setStatus(msg, kind){
+  statusEl.textContent = msg;
+  statusEl.className = 'status ' + (kind||'');
+}
+
+function httpStatusFromBanner(banner){
+  if(!banner) return 'Desconocido';
+  const firstLine = (banner.split('\n')[0]||'').trim();
+  const parts = firstLine.split(' ').filter(Boolean);
+  const candidate = parts.find(x => x.length===3 && !Number.isNaN(Number(x)));
+  return candidate || 'Desconocido';
+}
+
+function serverFromBanner(banner){
+  if(!banner) return 'Desconocido';
+  const line = banner.split('\n').find(l => l.toLowerCase().startsWith('server:'));
+  return line ? line.slice(7).trim() : 'Desconocido';
+}
+
+function renderTable(results){
+  resultsBody.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for(const r of results){
+    const tr = document.createElement('tr');
+    const title = r.title || '(sin título)';
+    const href = r.title_url || '#';
+    const hostnames = Array.isArray(r.hostnames) ? r.hostnames.join('<br>') : '-';
+    const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '-';
+    const server = serverFromBanner(r.banner);
+    const status = httpStatusFromBanner(r.banner);
+    tr.innerHTML = `
+      <td><a href="${href}" target="_blank" rel="noreferrer">${title}</a></td>
+      <td>${hostnames}</td>
+      <td>${ts}</td>
+      <td>${server}</td>
+      <td>${status}</td>
+    `;
+    frag.appendChild(tr);
+  }
+  resultsBody.appendChild(frag);
+}
+
+async function doSearch(query){
+  setStatus('Buscando…');
+  $('#go').disabled = true;
+  try{
+    const res = await fetch('/shodan/search', { method:'POST', headers:{ 'content-type':'application/json' }, body: JSON.stringify({ query }) });
+    if(!res.ok){ const t = await res.text(); throw new Error(`HTTP ${res.status}: ${t}`); }
+    const json = await res.json();
+    $('#json').textContent = JSON.stringify(json, null, 2);
+
+    const results = json.results || [];
+    const count = json.count ?? results.length;
+    pill.textContent = `${count} resultados para "${json.query || query}"`;
+
+    renderTable(results);
+
+    setStatus('Búsqueda completada correctamente.', 'ok');
+  }catch(err){
+    console.error(err);
+    setStatus('Error: ' + err.message, 'error');
+  }finally{
+    $('#go').disabled = false;
+  }
+}
+
+$('#qform').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const q = $('#query').value.trim();
+  if(!q) return setStatus('Introduce una consulta.', 'error');
+  doSearch(q);
+});
+</script>
+</body>
+</html>
+{% endblock %}

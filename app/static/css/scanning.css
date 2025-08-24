@@ -1,0 +1,79 @@
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+.row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.col {
+  flex: 1 1 360px;
+}
+.card {
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 1rem;
+  background: #0b1020;
+}
+.btn {
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.btn:hover {
+  background: #374151;
+}
+.muted {
+  color: #94a3b8;
+}
+.progress {
+  height: 8px;
+  background: #1f2937;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.bar {
+  height: 100%;
+  background: #22c55e;
+  width: 0%;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th,
+td {
+  border: 1px solid #334155;
+  padding: 0.5rem;
+  text-align: left;
+}
+th {
+  background: #0f172a;
+}
+.flash {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  margin: 0.5rem 0;
+}
+.flash.error {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+.flash.success {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+#target {
+  width: 100%;
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #0b1020;
+  color: #e5e7eb;
+}

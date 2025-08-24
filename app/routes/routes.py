@@ -4,9 +4,12 @@ from app.job_manager import EVENT_BUS   # para SSE
 import queue
 from flask import send_from_directory
 from pathlib import Path
-import os
+import os, requests
+
 
 REPORT_DIR = Path("reports/output")
+SEARCH_BACKEND = os.getenv("SHODAN_SEARCH_URL", "http://localhost:3000/search")
+
 
 main = Blueprint("main", __name__)
 
@@ -214,3 +217,19 @@ def api_reports():
     report_dir.mkdir(parents=True, exist_ok=True)
     files = sorted([f.name for f in report_dir.glob("*") if f.is_file()])
     return {"files": files}
+
+
+
+@main.get("/shodan")
+def shodan_page():
+    return render_template("shodan.html")
+
+@main.post("/shodan/search")
+def shodan_search():
+    data = request.get_json(force=True) or {}
+    try:
+        r = requests.post(SEARCH_BACKEND, json={"query": data.get("query","")}, timeout=30)
+        r.raise_for_status()
+        return jsonify(r.json())
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 502

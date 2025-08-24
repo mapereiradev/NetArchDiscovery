@@ -1,0 +1,133 @@
+:root {
+  --bg: #0b1220;
+  --panel: #0f172a;
+  --muted: #94a3b8;
+  --text: #e2e8f0;
+  --ok: #22c55e;
+  --error: #ef4444;
+}
+.container {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui;
+  background: var(--bg);
+  color: var(--text);
+}
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid #1f2a44;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+.card + .card {
+  margin-top: 16px;
+}
+.card-header {
+  padding: 14px 16px;
+  border-bottom: 1px dashed #1f2a44;
+  font-weight: 600;
+}
+.card-body {
+  padding: 16px;
+}
+.grid {
+  display: grid;
+  gap: 16px;
+}
+.grid-2 {
+  grid-template-columns: 1.2fr 0.8fr;
+}
+.btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #263454;
+  background: linear-gradient(180deg, #0ea5e9, #0284c7);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.input,
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #263454;
+  background: #0b1428;
+  color: var(--text);
+  font: 14px/1.4 Inter, system-ui;
+}
+textarea {
+  min-height: 56px;
+  resize: vertical;
+}
+.status {
+  font-size: 13px;
+  padding: 10px 14px;
+  border-top: 1px dashed #1f2a44;
+}
+.status.ok {
+  color: var(--ok);
+}
+.status.error {
+  color: var(--error);
+  white-space: pre-wrap;
+}
+.pill {
+  display: inline-block;
+  border: 1px solid #263454;
+  background: #0b1428;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #a3e3ff;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th,
+td {
+  text-align: left;
+  border-bottom: 1px solid #1f2a44;
+  padding: 10px 8px;
+  vertical-align: top;
+}
+th {
+  color: #9fb0c9;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+tr:hover td {
+  background: rgba(56, 189, 248, 0.05);
+}
+.jsondump {
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono";
+  font-size: 12px;
+  color: #b0c2de;
+  background: #0a1326;
+  border: 1px solid #1f2a44;
+  border-radius: 12px;
+  padding: 12px;
+  overflow: auto;
+  max-height: 40vh;
+}
+td a {
+  color: #e2e8f0;
+}
