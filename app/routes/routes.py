@@ -233,3 +233,47 @@ def shodan_search():
         return jsonify(r.json())
     except requests.RequestException as e:
         return jsonify({"error": str(e)}), 502
+
+
+@main.route("/harvester", methods=["GET"])
+def harvester():
+    jm = current_app.jobmanager
+    jobs = jm.list_jobs()
+    return render_template("harvester.html", jobs=jobs)
+
+@main.route("/harvester", methods=["POST"])
+def harvester_scan():
+    form = request.form
+    domain = (form.get("domain") or "").strip()
+    if not domain:
+        flash("Debes indicar un dominio (-d)", "error")
+        return redirect(url_for("main.harvester"))
+
+    # Construir diccionario de opciones
+    opts = {
+        "limit":       form.get("limit") or None,
+        "start":       form.get("start") or None,
+        "proxies":     bool(form.get("proxies")),
+        "shodan":      bool(form.get("shodan")),
+        "screenshot":  form.get("screenshot") or None,
+        "dns_server":  form.get("dns_server") or None,
+        "take_over":   bool(form.get("take_over")),
+        "dns_resolve": form.get("dns_resolve_value") or bool(form.get("dns_resolve")),
+        "dns_lookup":  bool(form.get("dns_lookup")),
+        "dns_brute":   bool(form.get("dns_brute")),
+        "filename":    form.get("filename") or None,
+        "wordlist":    form.get("wordlist") or None,
+        "api_scan":    bool(form.get("api_scan")),
+        "quiet":       bool(form.get("quiet")),
+        # Fuentes seleccionadas
+        "sources":     [s.strip() for s in (form.getlist("sources") or []) if s.strip()],
+        # Notas informativas
+        "notes":       form.get("notes") or "",
+    }
+
+    jm = current_app.jobmanager
+    # Crear job con meta que incluya job_id y report_dir (JobManager lo añadirá)
+    job = jm.create_job(target=domain, tools=["theharvester"], meta={"harvester_opts": opts})
+    jm.start_job(job)
+    # flash("Búsqueda encolada", "success")
+    return redirect(url_for("main.harvester"))

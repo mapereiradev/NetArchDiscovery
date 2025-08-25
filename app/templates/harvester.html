@@ -1,0 +1,374 @@
+{% extends "layout.html" %}
+{% block content %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>theHarvester — Búsqueda OSINT por dominio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .grid { display:grid; gap:.75rem; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); }
+    .muted { color:#94a3b8; font-size:.9rem; }
+    .inline-help { font-size:.85rem; margin:.25rem 0 0; }
+    details.cardish{border:1px solid #334155;border-radius:8px;padding:.75rem;background:#0b1220;}
+    code.kbd{background:#0b1220;border:1px solid #1f2a44;border-radius:6px;padding:.1rem .35rem;}
+    .preview{background:#0b1220;border:1px dashed #1f2a44;border-radius:8px;padding:.75rem;white-space:nowrap;overflow:auto;}
+    .row { display:flex; gap:1rem; flex-wrap:wrap; }
+    .col { flex:1 1 300px; }
+    label > small { display:block; color:#94a3b8; font-weight:normal; }
+    .chips { display:flex; flex-wrap:wrap; gap:.4rem; }
+    .chip { padding:.25rem .5rem; border:1px solid #1f2a44; border-radius:999px; font-size:.85rem; }
+    select[multiple]{min-height:220px;}
+  </style>
+</head>
+<body>
+<div class="container">
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+      <div class="flash {{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <section class="card">
+    <h1 style="margin:0 0 .5rem;">🔎 Lanza búsquedas con theHarvester</h1>
+    <p class="muted">Genera un <em>job</em> que tu API ejecutará con theHarvester CLI. Completa el dominio y las opciones que necesites.</p>
+
+    <form id="harvesterForm" method="post" action="{{ url_for('main.harvester_scan') }}">
+      <div class="grid">
+        <div>
+          <label for="domain"><strong>Dominio / Empresa <span style="color:#f43f5e">*</span></strong>
+            <small>Flag <code class="kbd">-d</code> / <code class="kbd">--domain</code></small>
+          </label>
+          <input id="domain" name="domain" type="text" placeholder="acme.com" required>
+          <p class="inline-help muted">Obligatorio.</p>
+        </div>
+
+        <div>
+          <label for="limit"><strong>Límite de resultados</strong>
+            <small>Flag <code class="kbd">-l</code> (por defecto 500)</small>
+          </label>
+          <input id="limit" name="limit" type="number" min="1" max="10000" placeholder="500">
+        </div>
+
+        <div>
+          <label for="start"><strong>Inicio (offset)</strong>
+            <small>Flag <code class="kbd">-S</code> (por defecto 0)</small>
+          </label>
+          <input id="start" name="start" type="number" min="0" placeholder="0">
+        </div>
+
+        <div>
+          <label><strong>Usar proxies</strong>
+            <small>Flag <code class="kbd">-p</code> (lee <code>proxies.yaml</code>)</small>
+          </label>
+          <div class="chips">
+            <label class="chip"><input type="checkbox" name="proxies" value="1"> Activar</label>
+          </div>
+        </div>
+
+        <div>
+          <label><strong>Shodan</strong>
+            <small>Flag <code class="kbd">-s</code> (consulta hosts descubiertos)</small>
+          </label>
+          <div class="chips">
+            <label class="chip"><input type="checkbox" name="shodan" value="1"> Activar</label>
+          </div>
+        </div>
+
+        <div>
+          <label for="screenshot_dir"><strong>Screenshots de subdominios</strong>
+            <small>Flag <code class="kbd">--screenshot</code> (directorio de salida)</small>
+          </label>
+          <input id="screenshot_dir" name="screenshot" type="text" placeholder="reports/screens/">
+        </div>
+
+        <div>
+          <label for="dns_server"><strong>Servidor DNS</strong>
+            <small>Flag <code class="kbd">-e</code> / <code class="kbd">--dns-server</code></small>
+          </label>
+          <input id="dns_server" name="dns_server" type="text" placeholder="1.1.1.1">
+        </div>
+
+        <div>
+          <label><strong>Takeover</strong>
+            <small>Flag <code class="kbd">-t</code></small>
+          </label>
+          <div class="chips">
+            <label class="chip"><input type="checkbox" name="take_over" value="1"> Comprobar</label>
+          </div>
+        </div>
+
+        <div>
+          <label for="dns_resolve_val"><strong>Resolución DNS</strong>
+            <small>Flag <code class="kbd">-r</code> / <code class="kbd">--dns-resolve</code> (opcional: ruta lista de resolvers)</small>
+          </label>
+          <div class="chips" style="margin-bottom:.4rem;">
+            <label class="chip"><input type="checkbox" id="dns_resolve_chk" name="dns_resolve" value="1"> Activar</label>
+          </div>
+          <input id="dns_resolve_val" name="dns_resolve_value" type="text" placeholder="conf/resolvers.txt" style="display:none;">
+        </div>
+
+        <div>
+          <label><strong>DNS lookup</strong>
+            <small>Flag <code class="kbd">-n</code> / <code class="kbd">--dns-lookup</code></small>
+          </label>
+          <div class="chips">
+            <label class="chip"><input type="checkbox" name="dns_lookup" value="1"> Activar</label>
+          </div>
+        </div>
+
+        <div>
+          <label><strong>DNS brute force</strong>
+            <small>Flag <code class="kbd">-c</code> / <code class="kbd">--dns-brute</code></small>
+          </label>
+          <div class="chips">
+            <label class="chip"><input type="checkbox" name="dns_brute" value="1"> Activar</label>
+          </div>
+        </div>
+
+        <div>
+          <label for="filename"><strong>Archivo de salida</strong>
+            <small>Flag <code class="kbd">-f</code> (genera XML y JSON)</small>
+          </label>
+          <input id="filename" name="filename" type="text" placeholder="reports/acme-{{ '%Y%m%d'|strftime if false else '' }}.harvester">
+        </div>
+
+        <div>
+          <label for="wordlist"><strong>Wordlist para endpoints API</strong>
+            <small>Flag <code class="kbd">-w</code></small>
+          </label>
+          <input id="wordlist" name="wordlist" type="text" placeholder="lists/apis.txt">
+        </div>
+
+        <div>
+          <label><strong>Escaneo de endpoints API</strong>
+            <small>Flag <code class="kbd">-a</code> / <code class="kbd">--api-scan</code></small>
+          </label>
+          <div class="chips">
+            <label class="chip"><input type="checkbox" name="api_scan" value="1"> Activar</label>
+          </div>
+        </div>
+
+        <div>
+          <label><strong>Modo silencioso</strong>
+            <small>Flag <code class="kbd">-q</code> / <code class="kbd">--quiet</code> (no avisar por API keys)</small>
+          </label>
+          <div class="chips">
+            <label class="chip"><input type="checkbox" name="quiet" value="1"> Activar</label>
+          </div>
+        </div>
+      </div>
+
+      <details class="cardish" style="margin-top:1rem;">
+        <summary><strong>Fuentes (flag <code class="kbd">-b</code> / <code class="kbd">--source</code>)</strong> — selecciona una o varias</summary>
+        <div class="row" style="margin-top:.5rem;">
+          <div class="col">
+            <label for="sources"><small>Pulsa Ctrl/Cmd para selección múltiple</small></label>
+            <select id="sources" name="sources" multiple>
+              <option>baidu</option>
+              <option>bevigil</option>
+              <option>brave</option>
+              <option>bufferoverun</option>
+              <option>builtwith</option>
+              <option>censys</option>
+              <option>certspotter</option>
+              <option>criminalip</option>
+              <option>crtsh</option>
+              <option>dehashed</option>
+              <option>dnsdumpster</option>
+              <option>duckduckgo</option>
+              <option>fullhunt</option>
+              <option>github-code</option>
+              <option>hackertarget</option>
+              <option>haveibeenpwned</option>
+              <option>hudsonrock</option>
+              <option>hunter</option>
+              <option>hunterhow</option>
+              <option>intelx</option>
+              <option>leaklookup</option>
+              <option>netlas</option>
+              <option>onyphe</option>
+              <option>otx</option>
+              <option>pentesttools</option>
+              <option>projectdiscovery</option>
+              <option>rapiddns</option>
+              <option>rocketreach</option>
+              <option>securityscorecard</option>
+              <option>securityTrails</option>
+              <option>shodan</option>
+              <option>subdomaincenter</option>
+              <option>subdomainfinderc99</option>
+              <option>threatminer</option>
+              <option>tomba</option>
+              <option>urlscan</option>
+              <option>venacus</option>
+              <option>virustotal</option>
+              <option>whoisxml</option>
+              <option>yahoo</option>
+              <option>zoomeye</option>
+            </select>
+          </div>
+          <div class="col">
+            <p class="muted" style="margin-top:0;">
+              Si no seleccionas ninguna, theHarvester usará su conjunto por defecto (según tus API keys configuradas).
+            </p>
+          </div>
+        </div>
+      </details>
+
+      <details class="cardish" style="margin-top:1rem;">
+        <summary><strong>Avanzadas</strong></summary>
+        <div class="grid" style="margin-top:.5rem;">
+          <div>
+            <label for="notes"><strong>Notas del job (no afecta a CLI)</strong></label>
+            <textarea id="notes" name="notes" rows="3" placeholder="Contexto interno para el job..."></textarea>
+          </div>
+        </div>
+      </details>
+
+      <div style="margin:1rem 0 .5rem;">
+        <label><strong>Previsualización del comando</strong></label>
+        <div id="cmdPreview" class="preview">theHarvester -d &lt;dominio&gt;</div>
+      </div>
+
+      <div class="row" style="align-items:center; margin-top:.75rem;">
+        <div class="col" style="flex:0 0 auto;">
+          <button type="submit" class="btn">Iniciar búsqueda</button>
+        </div>
+        <div class="col muted">La API recibirá estos parámetros y construirá la invocación de CLI.</div>
+      </div>
+    </form>
+  </section>
+
+  {% if jobs is defined %}
+  <section class="card">
+    <h2 style="margin-top:0;">Trabajos recientes</h2>
+    {% if jobs and jobs|length > 0 %}
+      <table id="jobs-table">
+        <thead>
+          <tr>
+            <th>Job</th>
+            <th>Estado</th>
+            <th>Progreso</th>
+            <th>Opciones</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for j in jobs|reverse %}
+          <tr id="row-{{ j.id }}">
+            <td><code>{{ j.id[:8] }}</code></td>
+            <td id="status-{{ j.id }}">{{ j.status }}</td>
+            <td style="min-width:180px;">
+              <div class="progress"><div id="bar-{{ j.id }}" class="bar" style="width: {{ j.progress }}%"></div></div>
+              <small id="pct-{{ j.id }}" class="muted">{{ j.progress }}%</small>
+            </td>
+            <td><small class="muted">{{ j.opts_summary }}</small></td>
+            <td>
+              <a class="btn" href="{{ url_for('main.job_detail', job_id=j.id) }}">Detalle</a>
+              {% if j.report_file %}
+                <a class="btn" href="{{ url_for('main.get_report', name=j.report_file) }}">Informe</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No hay trabajos aún. Lanza el primero con el formulario de arriba.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+</div>
+
+<script>
+(function(){
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+  const domain = $('#domain');
+  const limit = $('#limit');
+  const start = $('#start');
+  const proxies = $('input[name="proxies"]');
+  const shodan = $('input[name="shodan"]');
+  const screenshot = $('#screenshot_dir');
+  const dnsServer = $('#dns_server');
+  const takeOver = $('input[name="take_over"]');
+  const dnsResolveChk = $('#dns_resolve_chk');
+  const dnsResolveVal = $('#dns_resolve_val');
+  const dnsLookup = $('input[name="dns_lookup"]');
+  const dnsBrute = $('input[name="dns_brute"]');
+  const filename = $('#filename');
+  const wordlist = $('#wordlist');
+  const apiScan = $('input[name="api_scan"]');
+  const quiet = $('input[name="quiet"]');
+  const sources = $('#sources');
+  const preview = $('#cmdPreview');
+  const form = $('#harvesterForm');
+
+  // Mostrar/ocultar input de -r cuando está activo
+  dnsResolveChk?.addEventListener('change', () => {
+    dnsResolveVal.style.display = dnsResolveChk.checked ? 'block' : 'none';
+  });
+
+  // Construye una vista estilo CLI
+  function buildCmdPreview() {
+    let cmd = ['theHarvester'];
+    if (domain.value) { cmd.push('-d', shellEscape(domain.value)); }
+    if (limit.value) { cmd.push('-l', String(limit.value)); }
+    if (start.value) { cmd.push('-S', String(start.value)); }
+    if (proxies?.checked) { cmd.push('-p'); }
+    if (shodan?.checked) { cmd.push('-s'); }
+    if (screenshot.value) { cmd.push('--screenshot', shellEscape(screenshot.value)); }
+    if (dnsServer.value) { cmd.push('-e', shellEscape(dnsServer.value)); }
+    if (takeOver?.checked) { cmd.push('-t'); }
+    if (dnsResolveChk?.checked) {
+      cmd.push('-r');
+      if (dnsResolveVal.value) cmd.push(shellEscape(dnsResolveVal.value));
+    }
+    if (dnsLookup?.checked) { cmd.push('-n'); }
+    if (dnsBrute?.checked) { cmd.push('-c'); }
+    if (filename.value) { cmd.push('-f', shellEscape(filename.value)); }
+    if (wordlist.value) { cmd.push('-w', shellEscape(wordlist.value)); }
+    if (apiScan?.checked) { cmd.push('-a'); }
+    if (quiet?.checked) { cmd.push('-q'); }
+    const selectedSources = Array.from(sources?.selectedOptions || []).map(o => o.value.trim()).filter(Boolean);
+    selectedSources.forEach(src => { cmd.push('-b', src); });
+
+    preview.textContent = cmd.join(' ');
+  }
+
+  function shellEscape(v){
+    if (/^[A-Za-z0-9._:\\/\\-]+$/.test(v)) return v;
+    return `'${v.replace(/'/g, `'\\''`)}'`;
+  }
+
+  // Eventos para refrescar la vista
+  [
+    domain, limit, start, proxies, shodan, screenshot, dnsServer, takeOver,
+    dnsResolveChk, dnsResolveVal, dnsLookup, dnsBrute, filename, wordlist,
+    apiScan, quiet, sources
+  ].filter(Boolean).forEach(el => {
+    const evt = (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'radio') ? 'change' : 'input';
+    el.addEventListener(evt, buildCmdPreview);
+  });
+  buildCmdPreview();
+
+  // Validación básica
+  form.addEventListener('submit', (e) => {
+    if (!domain.value.trim()) {
+      e.preventDefault();
+      alert('Debes indicar un dominio (-d).');
+      domain.focus();
+      return false;
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
+{% endblock %}

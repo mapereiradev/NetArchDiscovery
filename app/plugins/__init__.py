@@ -2,6 +2,8 @@ from . import nmap as nmap_plugin
 from .local import local_enum as local_enum_plugin
 from . import dns_reverse as dns_reverse_plugin
 from . import shodan as shodan_plugin
+from . import theharvester as theharvester_plugin
+
 
 def get_available_tools():
     """
@@ -12,5 +14,5 @@ def get_available_tools():
         "local_enum":  lambda target, emit, meta: local_enum_plugin.run(target, emit=emit),
         "dns_reverse": lambda target, emit, meta: dns_reverse_plugin.run(target, emit=emit, meta=meta),
         "shodan": lambda target, emit, meta: shodan_plugin.run(target, emit=emit, meta=meta),
-
+        "theharvester": lambda target, emit, meta: theharvester_plugin.run(target, emit=emit, meta=meta),
     }
