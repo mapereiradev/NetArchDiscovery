@@ -187,7 +187,6 @@ def build_nmap_options(form) -> list[str]:
 
     return opts
 
-
 @main.route("/reports/<path:name>")
 def get_report(name):
     """
@@ -218,8 +217,6 @@ def api_reports():
     files = sorted([f.name for f in report_dir.glob("*") if f.is_file()])
     return {"files": files}
 
-
-
 @main.get("/shodan")
 def shodan_page():
     return render_template("shodan.html")
@@ -233,7 +230,6 @@ def shodan_search():
         return jsonify(r.json())
     except requests.RequestException as e:
         return jsonify({"error": str(e)}), 502
-
 
 @main.route("/harvester", methods=["GET"])
 def harvester():
@@ -276,4 +272,4 @@ def harvester_scan():
     job = jm.create_job(target=domain, tools=["theharvester"], meta={"harvester_opts": opts})
     jm.start_job(job)
     # flash("Búsqueda encolada", "success")
-    return redirect(url_for("main.harvester"))
+    return redirect(url_for("main.harvester", job_id=job.id))

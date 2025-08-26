@@ -92,5 +92,83 @@
     <pre>{{ job.errors | tojson(indent=2) }}</pre>
   </div>
   {% endif %}
+
+{% set hv = job.results.theHarvester %}
+{% if hv %}
+  <div class="card">
+    <h2>Resultados theHarvester</h2>
+
+    {% if hv.cmd %}
+      <p class="muted"><strong>Comando:</strong></p>
+      <pre class="muted" style="white-space:pre-wrap;word-break:break-word">{{ hv.cmd }}</pre>
+    {% endif %}
+
+    <div class="grid two">
+      <section>
+        <h3>Hosts ({{ hv.hosts|length or 0 }})</h3>
+        {% if hv.hosts and hv.hosts|length > 0 %}
+          {# Preview corto y desplegable con todo #}
+          <ul class="mono">
+            {% for h in hv.hosts[:20] %}
+              <li>{{ h }}</li>
+            {% endfor %}
+          </ul>
+          {% if hv.hosts|length > 20 %}
+            <details>
+              <summary>Ver los {{ hv.hosts|length - 20 }} restantes</summary>
+              <ul class="mono">
+                {% for h in hv.hosts[20:] %}
+                  <li>{{ h }}</li>
+                {% endfor %}
+              </ul>
+            </details>
+          {% endif %}
+        {% else %}
+          <p class="muted">Sin hosts.</p>
+        {% endif %}
+      </section>
+
+      <section>
+        <h3>Emails ({{ hv.emails|length or 0 }})</h3>
+        {% if hv.emails and hv.emails|length > 0 %}
+          <ul class="mono">
+            {% for e in hv.emails[:20] %}
+              <li>{{ e }}</li>
+            {% endfor %}
+          </ul>
+          {% if hv.emails|length > 20 %}
+            <details>
+              <summary>Ver los {{ hv.emails|length - 20 }} restantes</summary>
+              <ul class="mono">
+                {% for e in hv.emails[20:] %}
+                  <li>{{ e }}</li>
+                {% endfor %}
+              </ul>
+            </details>
+          {% endif %}
+        {% else %}
+          <p class="muted">Sin emails.</p>
+        {% endif %}
+      </section>
+    </div>
+
+    <section>
+      <h3>Shodan ({{ hv.shodan|length or 0 }})</h3>
+      {% if hv.shodan and hv.shodan|length > 0 %}
+        <details open>
+          <summary>Ver resultados</summary>
+          <ul class="mono">
+            {% for item in hv.shodan %}
+              <li>{{ item }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% else %}
+        <p class="muted">Sin resultados de Shodan.</p>
+      {% endif %}
+    </section>
+  </div>
+{% endif %}
+
 </body>
 </html>

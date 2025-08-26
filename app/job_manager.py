@@ -133,6 +133,7 @@ class JobManager:
         Devuelve la instancia de Job con un id único.
         """
         job_id = uuid.uuid4().hex
+        meta = {**(meta or {}), "job_id": job_id, "report_dir": self.report_dir}
         job = Job(id=job_id, target=target, tools=tools, meta=meta or {})
         setattr(job, "report_dir", self.report_dir)
         with self.lock:
