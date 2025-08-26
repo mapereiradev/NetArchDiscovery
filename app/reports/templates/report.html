@@ -93,31 +93,35 @@
   </div>
   {% endif %}
 
-{% set hv = job.results.theHarvester %}
-{% if hv %}
+{# ===== Resultados theHarvester ===== #}
+{% set hv0 = job.results.theHarvester or job.results.theharvester %}
+{% if hv0 %}
+{# Diccionario real de datos (hosts/emails/...) #}
+{% set data = hv0.results if hv0.results is defined else hv0 %}
+{% set cmd  = (hv0.meta.cmd if (hv0.meta is defined and hv0.meta.cmd is defined) else (data.cmd if data.cmd is defined else None)) %}
+
   <div class="card">
     <h2>Resultados theHarvester</h2>
 
-    {% if hv.cmd %}
+    {% if cmd %}
       <p class="muted"><strong>Comando:</strong></p>
-      <pre class="muted" style="white-space:pre-wrap;word-break:break-word">{{ hv.cmd }}</pre>
+      <pre class="muted" style="white-space:pre-wrap;word-break:break-word">{{ cmd }}</pre>
     {% endif %}
 
     <div class="grid two">
       <section>
-        <h3>Hosts ({{ hv.hosts|length or 0 }})</h3>
-        {% if hv.hosts and hv.hosts|length > 0 %}
-          {# Preview corto y desplegable con todo #}
+        <h3>Hosts ({{ data.hosts|length if data.hosts is defined else 0 }})</h3>
+        {% if data.hosts is defined and data.hosts|length > 0 %}
           <ul class="mono">
-            {% for h in hv.hosts[:20] %}
+            {% for h in data.hosts[:20] %}
               <li>{{ h }}</li>
             {% endfor %}
           </ul>
-          {% if hv.hosts|length > 20 %}
+          {% if data.hosts|length > 20 %}
             <details>
-              <summary>Ver los {{ hv.hosts|length - 20 }} restantes</summary>
+              <summary>Ver los {{ data.hosts|length - 20 }} restantes</summary>
               <ul class="mono">
-                {% for h in hv.hosts[20:] %}
+                {% for h in data.hosts[20:] %}
                   <li>{{ h }}</li>
                 {% endfor %}
               </ul>
@@ -129,18 +133,18 @@
       </section>
 
       <section>
-        <h3>Emails ({{ hv.emails|length or 0 }})</h3>
-        {% if hv.emails and hv.emails|length > 0 %}
+        <h3>Emails ({{ data.emails|length if data.emails is defined else 0 }})</h3>
+        {% if data.emails is defined and data.emails|length > 0 %}
           <ul class="mono">
-            {% for e in hv.emails[:20] %}
+            {% for e in data.emails[:20] %}
               <li>{{ e }}</li>
             {% endfor %}
           </ul>
-          {% if hv.emails|length > 20 %}
+          {% if data.emails|length > 20 %}
             <details>
-              <summary>Ver los {{ hv.emails|length - 20 }} restantes</summary>
+              <summary>Ver los {{ data.emails|length - 20 }} restantes</summary>
               <ul class="mono">
-                {% for e in hv.emails[20:] %}
+                {% for e in data.emails[20:] %}
                   <li>{{ e }}</li>
                 {% endfor %}
               </ul>
@@ -153,12 +157,12 @@
     </div>
 
     <section>
-      <h3>Shodan ({{ hv.shodan|length or 0 }})</h3>
-      {% if hv.shodan and hv.shodan|length > 0 %}
+      <h3>Shodan ({{ data.shodan|length if data.shodan is defined else 0 }})</h3>
+      {% if data.shodan is defined and data.shodan|length > 0 %}
         <details open>
           <summary>Ver resultados</summary>
           <ul class="mono">
-            {% for item in hv.shodan %}
+            {% for item in data.shodan %}
               <li>{{ item }}</li>
             {% endfor %}
           </ul>
@@ -167,8 +171,37 @@
         <p class="muted">Sin resultados de Shodan.</p>
       {% endif %}
     </section>
+
+    {# Opcional: más campos si existen en tu JSON #}
+    {% if data.interesting_urls is defined and data.interesting_urls|length > 0 %}
+      <section>
+        <h3>URLs de interés ({{ data.interesting_urls|length }})</h3>
+        <ul class="mono">
+          {% for u in data.interesting_urls[:20] %}
+            <li>{{ u }}</li>
+          {% endfor %}
+        </ul>
+        {% if data.interesting_urls|length > 20 %}
+          <details><summary>Ver todas</summary>
+            <ul class="mono">
+              {% for u in data.interesting_urls[20:] %}<li>{{ u }}</li>{% endfor %}
+            </ul>
+          </details>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    {% if data.ips is defined and data.ips|length > 0 %}
+      <section>
+        <h3>IPs ({{ data.ips|length }})</h3>
+        <ul class="mono">
+          {% for ip in data.ips[:50] %}<li>{{ ip }}</li>{% endfor %}
+        </ul>
+      </section>
+    {% endif %}
   </div>
 {% endif %}
+
 
 </body>
 </html>

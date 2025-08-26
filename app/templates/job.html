@@ -45,6 +45,7 @@
   {% endif %}
 </div>
 
+<!-- ===== DNS inversa (PTR) ===== -->
 <div class="card">
   <h3>DNS inversa (PTR)</h3>
   {% if job.results.dns_reverse and job.results.dns_reverse.ptrs %}
@@ -66,8 +67,7 @@
   {% endif %}
 </div>
 
-
-<!-- ===== Resultados Nmap (si existen) ===== -->
+<!-- ===== Resultados Nmap ===== -->
 <div class="card">
   <h3>Resultados Nmap</h3>
   {% if job.results.nmap and job.results.nmap.assets %}
@@ -79,16 +79,29 @@
       </thead>
       <tbody>
         {% for host in job.results.nmap.assets %}
-          {% for port in host.ports %}
-          <tr>
-            <td>{{ host.ip }}</td>
-            <td>{{ host.hostname }}</td>
-            <td>{{ host.os or '' }}</td>
-            <td>{{ port.port }}/{{ port.proto if port.proto is defined else 'tcp' }}</td>
-            <td>{{ port.service }}</td>
-            <td>{{ (port.product ~ ' ' ~ port.version).strip() if port.product is defined else '' }}</td>
-          </tr>
-          {% endfor %}
+          {% if host.ports and host.ports|length > 0 %}
+            {% for port in host.ports %}
+              <tr>
+                <td>{{ host.ip }}</td>
+                <td>{{ host.hostname }}</td>
+                <td>{{ host.os or '' }}</td>
+                <td>{{ port.port }}/{{ port.proto if port.proto is defined else 'tcp' }}</td>
+                <td>{{ port.service }}</td>
+                <td>
+                  {% if port.product is defined or port.version is defined %}
+                    {{ ( (port.product or '') ~ ' ' ~ (port.version or '') ).strip() }}
+                  {% else %}{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td>{{ host.ip }}</td>
+              <td>{{ host.hostname or '' }}</td>
+              <td>{{ host.os or '' }}</td>
+              <td colspan="3" class="muted">Sin puertos abiertos</td>
+            </tr>
+          {% endif %}
         {% endfor %}
       </tbody>
     </table>
@@ -97,17 +110,92 @@
   {% endif %}
 </div>
 
-<!-- Enlace a informe si tu JobManager lo establece -->
+<!-- ===== Resultados theHarvester ===== -->
+{% set hv0 = job.results.theHarvester or job.results.theharvester %}
+{% if hv0 %}
+  {# 'data' apunta al diccionario que realmente tiene hosts/emails/shodan #}
+  {% set data = hv0.results if hv0.results is defined else hv0 %}
+  {% set cmd  = (hv0.meta.cmd if (hv0.meta is defined and hv0.meta.cmd is defined) else (data.cmd if data.cmd is defined else None)) %}
+
+  <div class="card">
+    <h3>Resultados theHarvester</h3>
+
+    {% if cmd %}
+      <p class="muted"><strong>Comando:</strong></p>
+      <pre class="muted" style="white-space:pre-wrap;word-break:break-word">{{ cmd }}</pre>
+    {% endif %}
+
+    <h4>Hosts ({{ data.hosts|length if data.hosts is defined else 0 }})</h4>
+    {% if data.hosts is defined and data.hosts|length > 0 %}
+      <ul style="margin-left: 20px;">
+        {% for h in data.hosts[:20] %}
+          <li>{{ h }}</li>
+        {% endfor %}
+      </ul>
+      {% if data.hosts|length > 20 %}
+        <details>
+          <summary>Ver los {{ data.hosts|length - 20 }} restantes</summary>
+          <ul style="margin-left: 20px;">
+            {% for h in data.hosts[20:] %}
+              <li>{{ h }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% endif %}
+    {% else %}
+      <p class="muted">Sin hosts.</p>
+    {% endif %}
+
+    <h4>Emails ({{ data.emails|length if data.emails is defined else 0 }})</h4>
+    {% if data.emails is defined and data.emails|length > 0 %}
+      <ul style="margin-left: 20px;">
+        {% for e in data.emails[:20] %}
+          <li>{{ e }}</li>
+        {% endfor %}
+      </ul>
+      {% if data.emails|length > 20 %}
+        <details>
+          <summary>Ver los {{ data.emails|length - 20 }} restantes</summary>
+          <ul style="margin-left: 20px;">
+            {% for e in data.emails[20:] %}
+              <li>{{ e }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% endif %}
+    {% else %}
+      <p class="muted">Sin emails.</p>
+    {% endif %}
+
+    <h4>Shodan ({{ data.shodan|length if data.shodan is defined else 0 }})</h4>
+    {% if data.shodan is defined and data.shodan|length > 0 %}
+       <ul style="margin-left: 20px;">
+        {% for s in data.shodan %}
+          <li>{{ s }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Sin resultados de Shodan.</p>
+    {% endif %}
+  </div>
+{% endif %}
+
+
+
+
+<!-- ===== Enlace a informe (si existe) ===== -->
 <div class="card" id="report_link">
   {% if job.report_file %}
     <a class="btn" href="{{ url_for('main.get_report', name=job.report_file) }}">Abrir informe</a>
   {% else %}
     <span class="muted">El informe aparecerá aquí al finalizar.</span>
   {% endif %}
-  <div class="card">
-  <a class="btn" href="{{ url_for('main.api_job', job_id=job.id) }}" target="_blank">Descargar JSON del job</a>
 </div>
 
+<!-- Botón JSON del job (tarjeta independiente para que no se pierda con updates del informe) -->
+<div class="card">
+  <a class="btn" href="{{ url_for('main.api_job', job_id=job.id) }}" target="_blank">Descargar JSON del job</a>
+</div>
 
 {% if job.results.findings %}
 <div class="card">
@@ -123,11 +211,18 @@
 </div>
 {% endif %}
 
-<a href="/scanning">Volver</a>
+{% if hv0 %}
+<a style="color: white;" href="/harvester">Volver a TheHarvester</a>
+{% else %}
+<a style="color: white;" href="/scanning">Volver a Scanning</a>
+{% endif %}
 
 <script>
   // SSE para este job
   const src = new EventSource("{{ url_for('main.events') }}?job_id={{ job.id }}");
+
+  // Plantilla de URL para el informe (evita hardcodear rutas en el cliente)
+  const reportHrefTemplate = "{{ url_for('main.get_report', name='__NAME__') }}";
 
   src.addEventListener("progress", e => {
     const d = JSON.parse(e.data);
@@ -141,9 +236,11 @@
     if (d.status) {
       document.getElementById("status").textContent = d.status;
     }
+    // Si llega el nombre del informe, pintamos/actualizamos el botón sin romper otros elementos
     if (d.report) {
+      const url = reportHrefTemplate.replace("__NAME__", encodeURIComponent(d.report));
       const box = document.getElementById("report_link");
-      box.innerHTML = `<a class="btn" href="/reports/${d.report}">Abrir informe</a>`;
+      box.innerHTML = `<a class="btn" href="${url}">Abrir informe</a>`;
     }
   });
 

@@ -1,14 +1,80 @@
 {% extends "layout.html" %}
 {% block content %}
+
+<style>
+  /* Estilos locales a la home: respetan tu paleta */
+  .hero {
+    max-width: 900px;
+    margin: 2rem auto 1.25rem;
+    padding: 1.25rem 1.5rem;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 12px;
+  }
+  .hero h2 { margin: .25rem 0  .5rem; font-size: 1.6rem; }
+  .hero p  { margin: 0; color: #cbd5e1 }
+
+  .actions {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  @media (max-width: 900px) { .actions { grid-template-columns: 1fr; } }
+
+  .action-card {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: .5rem;
+    background: #0b1020;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 1rem;
+  }
+  .action-card h3 { margin: 0; font-size: 1.1rem; }
+  .action-card p  { margin: 0; color:#94a3b8; line-height: 1.35; }
+
+  /* Botón grande pero respetando tu .btn */
+  .btn-lg { display:inline-block; padding:.55rem .9rem; border-radius:8px; margin-top:.5rem; }
+</style>
+
 <main>
-    <section>
-        <h2>Bienvenido</h2>
-        <p>Escanea dispositivos y redes Linux para descubrir servicios, puertos abiertos y posibles vulnerabilidades.</p>
-        <a class="btn" href="{{ url_for('main.scanning') }}">Ir a Escaneo</a>
-        <a class="btn" href="{{ url_for('main.shodan_page') }}">Ir a Búsqueda en Shodan</a>
-    </section>
+  <!-- Hero -->
+  <section class="hero">
+    <h2>Bienvenido</h2>
+    <p>Escanea dispositivos y redes Linux para descubrir servicios, puertos abiertos y posibles vulnerabilidades.</p>
+  </section>
+
+  <!-- Acciones principales -->
+  <section class="actions">
+    <div class="action-card">
+      <h3>Nuevo escaneo</h3>
+      <p>Lanza tareas de descubrimiento y mapea hosts, puertos y servicios.</p>
+      <div>
+        <a class="btn btn-lg" href="{{ url_for('main.scanning') }}">Ir a Escaneo</a>
+      </div>
+    </div>
+
+    <div class="action-card">
+      <h3>Búsqueda en Shodan</h3>
+      <p>Consulta activos expuestos por IP/host y filtra por servicio o tecnología.</p>
+      <div>
+        <a class="btn btn-lg" href="{{ url_for('main.shodan_page') }}">Ir a Búsqueda en Shodan</a>
+      </div>
+    </div>
+
+    <div class="action-card">
+      <h3>Herramientas OSINT</h3>
+      <p>Descubre informacion sobre tu objetivo usando fuentes abiertas<p>
+      <div>
+        <a class="btn btn-lg" href="{{ url_for('main.harvester') }}">Ir a The Harvester</a>
+      </div>
+    </div>
+  </section>
 </main>
-<footer>
-    <p>© 2025 NetarchDiscovery</p>
+
+<footer style="max-width:900px;margin:2rem auto 0;color:#94a3b8">
+  <p>© 2025 NetarchDiscovery</p>
 </footer>
 {% endblock %}

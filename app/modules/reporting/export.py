@@ -28,7 +28,6 @@ JINJA_TEMPLATE = """<!doctype html>
   <h1>Informe de escaneo</h1>
   <div class="card kv">
     <div><strong>Job</strong></div><div><code>{{ job.id }}</code></div>
-    <div><strong>Estado</strong></div><div>{{ job.status }}</div>
     <div><strong>Creado</strong></div><div>{{ job.created_at }}</div>
     <div><strong>Generado</strong></div><div>{{ generated }}</div>
     <div><strong>Target</strong></div><div>{{ job.target or "(local)" }}</div>
@@ -100,30 +99,35 @@ JINJA_TEMPLATE = """<!doctype html>
   </div>
   {% endif %}
 
-{% set hv = job.results.theHarvester %}
-{% if hv %}
+{# ===== Resultados theHarvester ===== #}
+{% set hv0 = job.results.theHarvester or job.results.theharvester %}
+{% if hv0 %}
+  {# Diccionario real de datos (hosts/emails/...) #}
+  {% set data = hv0.results if hv0.results is defined else hv0 %}
+  {% set cmd  = (hv0.meta.cmd if (hv0.meta is defined and hv0.meta.cmd is defined) else (data.cmd if data.cmd is defined else None)) %}
+
   <div class="card">
     <h2>Resultados theHarvester</h2>
 
-    {% if hv.cmd %}
+    {% if cmd %}
       <p class="muted"><strong>Comando:</strong></p>
-      <pre class="muted" style="white-space:pre-wrap;word-break:break-word">{{ hv.cmd }}</pre>
+      <pre class="muted" style="white-space:pre-wrap;word-break:break-word">{{ cmd }}</pre>
     {% endif %}
 
     <div class="grid two">
       <section>
-        <h3>Hosts ({{ hv.hosts|length or 0 }})</h3>
-        {% if hv.hosts and hv.hosts|length > 0 %}
+        <h3>Hosts ({{ data.hosts|length if data.hosts is defined else 0 }})</h3>
+        {% if data.hosts is defined and data.hosts|length > 0 %}
           <ul class="mono">
-            {% for h in hv.hosts[:20] %}
+            {% for h in data.hosts[:20] %}
               <li>{{ h }}</li>
             {% endfor %}
           </ul>
-          {% if hv.hosts|length > 20 %}
+          {% if data.hosts|length > 20 %}
             <details>
-              <summary>Ver los {{ hv.hosts|length - 20 }} restantes</summary>
+              <summary>Ver los {{ data.hosts|length - 20 }} restantes</summary>
               <ul class="mono">
-                {% for h in hv.hosts[20:] %}
+                {% for h in data.hosts[20:] %}
                   <li>{{ h }}</li>
                 {% endfor %}
               </ul>
@@ -135,18 +139,18 @@ JINJA_TEMPLATE = """<!doctype html>
       </section>
 
       <section>
-        <h3>Emails ({{ hv.emails|length or 0 }})</h3>
-        {% if hv.emails and hv.emails|length > 0 %}
+        <h3>Emails ({{ data.emails|length if data.emails is defined else 0 }})</h3>
+        {% if data.emails is defined and data.emails|length > 0 %}
           <ul class="mono">
-            {% for e in hv.emails[:20] %}
+            {% for e in data.emails[:20] %}
               <li>{{ e }}</li>
             {% endfor %}
           </ul>
-          {% if hv.emails|length > 20 %}
+          {% if data.emails|length > 20 %}
             <details>
-              <summary>Ver los {{ hv.emails|length - 20 }} restantes</summary>
+              <summary>Ver los {{ data.emails|length - 20 }} restantes</summary>
               <ul class="mono">
-                {% for e in hv.emails[20:] %}
+                {% for e in data.emails[20:] %}
                   <li>{{ e }}</li>
                 {% endfor %}
               </ul>
@@ -159,12 +163,12 @@ JINJA_TEMPLATE = """<!doctype html>
     </div>
 
     <section>
-      <h3>Shodan ({{ hv.shodan|length or 0 }})</h3>
-      {% if hv.shodan and hv.shodan|length > 0 %}
+      <h3>Shodan ({{ data.shodan|length if data.shodan is defined else 0 }})</h3>
+      {% if data.shodan is defined and data.shodan|length > 0 %}
         <details open>
           <summary>Ver resultados</summary>
           <ul class="mono">
-            {% for item in hv.shodan %}
+            {% for item in data.shodan %}
               <li>{{ item }}</li>
             {% endfor %}
           </ul>
@@ -173,7 +177,48 @@ JINJA_TEMPLATE = """<!doctype html>
         <p class="muted">Sin resultados de Shodan.</p>
       {% endif %}
     </section>
+
+    {# Opcional: más campos si existen en tu JSON #}
+    {% if data.interesting_urls is defined and data.interesting_urls|length > 0 %}
+      <section>
+        <h3>URLs de interés ({{ data.interesting_urls|length }})</h3>
+        <ul class="mono">
+          {% for u in data.interesting_urls[:20] %}
+            <li>{{ u }}</li>
+          {% endfor %}
+        </ul>
+        {% if data.interesting_urls|length > 20 %}
+          <details><summary>Ver todas</summary>
+            <ul class="mono">
+              {% for u in data.interesting_urls[20:] %}<li>{{ u }}</li>{% endfor %}
+            </ul>
+          </details>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    {% if data.ips is defined and data.ips|length > 0 %}
+      <section>
+        <h3>IPs ({{ data.ips|length }})</h3>
+        <ul class="mono">
+          {% for ip in data.ips[:50] %}<li>{{ ip }}</li>{% endfor %}
+        </ul>
+      </section>
+    {% endif %}
   </div>
+{% endif %}
+
+{% if include_routes %}
+<script>
+  window.APP_ROUTES = {
+    EVENTS_URL: "{{ url_for('main.events') }}",
+    API_REPORTS_URL: "{{ url_for('main.api_reports') }}",
+    API_HARVESTER_URL: "{{ url_for('main.harvester_scan') }}",
+    JOB_DETAIL_URL_TMPL: "{{ url_for('main.job_detail', job_id='__ID__') }}",
+    REPORT_URL_TMPL: "{{ url_for('main.get_report', name='__NAME__') }}"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/harvester.js') }}"></script>
 {% endif %}
 
 </body>
@@ -223,16 +268,16 @@ def export_to_jsonl(job) -> str:
         for h in results.get("nmap", {}).get("assets", []):
             f.write(json.dumps({"type": "nmap_host", **h}, ensure_ascii=False) + "\n")
 
-        # Hosts de theHarvester
-        for h in results.get("theHarvester", {}).get("hosts", []):
+        # Hosts de theharvester
+        for h in results.get("theharvester", {}).get("hosts", []):
             f.write(json.dumps({"type": "harvester_host", "host": h}, ensure_ascii=False) + "\n")
 
-        # Emails de theHarvester
-        for e in results.get("theHarvester", {}).get("emails", []):
+        # Emails de theharvester
+        for e in results.get("theharvester", {}).get("emails", []):
             f.write(json.dumps({"type": "harvester_email", "email": e}, ensure_ascii=False) + "\n")
 
         # Shodan (si devuelve lista)
-        for s in results.get("theHarvester", {}).get("shodan", []):
+        for s in results.get("theharvester", {}).get("shodan", []):
             f.write(json.dumps({"type": "harvester_shodan", "entry": s}, ensure_ascii=False) + "\n")
 
         # Otros módulos locales
@@ -248,7 +293,7 @@ def export_to_html(job) -> str:
     - job.id, job.status, job.created_at, job.target, job.tools
     - job.results.nmap.assets[*].ports[*]
     - job.results.local_enum
-    - job.results.theHarvester (cmd, hosts[], emails[], shodan[])
+    - job.results.theharvester (cmd, hosts[], emails[], shodan[])
     - job.errors (opcional)
     """
     # (Opcional) corre correlación si la usas en otra parte

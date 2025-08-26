@@ -21,6 +21,7 @@
     .chip { padding:.25rem .5rem; border:1px solid #1f2a44; border-radius:999px; font-size:.85rem; }
     select[multiple]{min-height:220px;}
   </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/scanning.css') }}">
 </head>
 <body>
 <div class="container">
@@ -268,9 +269,9 @@
             <td><small class="muted">{{ j.opts_summary }}</small></td>
             <td>
               <a class="btn" href="{{ url_for('main.job_detail', job_id=j.id) }}">Detalle</a>
-              {% if j.report_file %}
-                <a class="btn" href="{{ url_for('main.get_report', name=j.report_file) }}">Informe</a>
-              {% endif %}
+            {% if j.report_file %}
+              <a class="btn" href="{{ url_for('main.get_report', name=j.report_file) }}">Informe</a>
+            {% endif %}
             </td>
           </tr>
         {% endfor %}
@@ -285,89 +286,16 @@
 </div>
 
 <script>
-(function(){
-  const $ = (s) => document.querySelector(s);
-  const $$ = (s) => Array.from(document.querySelectorAll(s));
-
-  const domain = $('#domain');
-  const limit = $('#limit');
-  const start = $('#start');
-  const proxies = $('input[name="proxies"]');
-  const shodan = $('input[name="shodan"]');
-  const screenshot = $('#screenshot_dir');
-  const dnsServer = $('#dns_server');
-  const takeOver = $('input[name="take_over"]');
-  const dnsResolveChk = $('#dns_resolve_chk');
-  const dnsResolveVal = $('#dns_resolve_val');
-  const dnsLookup = $('input[name="dns_lookup"]');
-  const dnsBrute = $('input[name="dns_brute"]');
-  const filename = $('#filename');
-  const wordlist = $('#wordlist');
-  const apiScan = $('input[name="api_scan"]');
-  const quiet = $('input[name="quiet"]');
-  const sources = $('#sources');
-  const preview = $('#cmdPreview');
-  const form = $('#harvesterForm');
-
-  // Mostrar/ocultar input de -r cuando está activo
-  dnsResolveChk?.addEventListener('change', () => {
-    dnsResolveVal.style.display = dnsResolveChk.checked ? 'block' : 'none';
-  });
-
-  // Construye una vista estilo CLI
-  function buildCmdPreview() {
-    let cmd = ['theHarvester'];
-    if (domain.value) { cmd.push('-d', shellEscape(domain.value)); }
-    if (limit.value) { cmd.push('-l', String(limit.value)); }
-    if (start.value) { cmd.push('-S', String(start.value)); }
-    if (proxies?.checked) { cmd.push('-p'); }
-    if (shodan?.checked) { cmd.push('-s'); }
-    if (screenshot.value) { cmd.push('--screenshot', shellEscape(screenshot.value)); }
-    if (dnsServer.value) { cmd.push('-e', shellEscape(dnsServer.value)); }
-    if (takeOver?.checked) { cmd.push('-t'); }
-    if (dnsResolveChk?.checked) {
-      cmd.push('-r');
-      if (dnsResolveVal.value) cmd.push(shellEscape(dnsResolveVal.value));
-    }
-    if (dnsLookup?.checked) { cmd.push('-n'); }
-    if (dnsBrute?.checked) { cmd.push('-c'); }
-    if (filename.value) { cmd.push('-f', shellEscape(filename.value)); }
-    if (wordlist.value) { cmd.push('-w', shellEscape(wordlist.value)); }
-    if (apiScan?.checked) { cmd.push('-a'); }
-    if (quiet?.checked) { cmd.push('-q'); }
-    const selectedSources = Array.from(sources?.selectedOptions || []).map(o => o.value.trim()).filter(Boolean);
-    selectedSources.forEach(src => { cmd.push('-b', src); });
-
-    preview.textContent = cmd.join(' ');
-  }
-
-  function shellEscape(v){
-    if (/^[A-Za-z0-9._:\\/\\-]+$/.test(v)) return v;
-    return `'${v.replace(/'/g, `'\\''`)}'`;
-  }
-
-  // Eventos para refrescar la vista
-  [
-    domain, limit, start, proxies, shodan, screenshot, dnsServer, takeOver,
-    dnsResolveChk, dnsResolveVal, dnsLookup, dnsBrute, filename, wordlist,
-    apiScan, quiet, sources
-  ].filter(Boolean).forEach(el => {
-    const evt = (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'radio') ? 'change' : 'input';
-    el.addEventListener(evt, buildCmdPreview);
-  });
-  buildCmdPreview();
-
-  // Validación básica
-  form.addEventListener('submit', (e) => {
-    if (!domain.value.trim()) {
-      e.preventDefault();
-      alert('Debes indicar un dominio (-d).');
-      domain.focus();
-      return false;
-    }
-  });
-})();
+  window.APP_ROUTES = {
+    EVENTS_URL: "{{ url_for('main.events') }}",
+    API_REPORTS_URL: "{{ url_for('main.api_reports') }}",
+    API_HARVESTER_URL: "{{ url_for('main.harvester_scan') }}",
+    JOB_DETAIL_URL_TMPL: "{{ url_for('main.job_detail', job_id='__ID__') }}",
+    REPORT_URL_TMPL: "{{ url_for('main.get_report', name='__NAME__') }}"
+  };
 </script>
+<script src="{{ url_for('static', filename='js/harvester.js') }}"></script>
+
 
 </body>
 </html>
