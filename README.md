@@ -15,6 +15,15 @@ Integra distintas utilidades de *information gathering* y escaneo en un **flujo 
 - **Reportes automáticos** en:
   - HTML (legible, con hallazgos destacados).
   - JSON/CSV (estructurado, para SIEM/Elastic/Wazuh).
+ 
+## Archivo de entorno
+Se necesita crear un archivo .env y colocarlo en el directorio raíz del proyecto con los siguientes datos:
+
+```
+FILEPATH_THE_HARVESTER=/tu/directorio/reportes/harvester
+OUTPUT_PATH_THE_HARVESTER=//tu/directorio/reportes/
+SECRET_KEY=change-m
+```
 
 ## Instalación
 
@@ -25,5 +34,24 @@ Requisitos:
 
 Clonar repositorio:
 ```bash
-git clone https://github.com/tuusuario/NetArchDiscovery.git
+git clone https://github.com/mapereiradev/NetArchDiscovery.git
 cd NetArchDiscovery
+
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+python run.py
+```
+## Arrancar el proyecto
+- En local:
+  ```bash
+  python run.py
+  ```
+- En Docker:
+  ```bash
+  docker compose build --no-cache netarch
+  docker compose up -d netarch
+  docker compose logs -f netarch
+  curl http://localhost:5000/health
+  ```
