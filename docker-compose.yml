@@ -6,13 +6,15 @@ services:
       - .env
     environment:
       - REPORT_DIR=/app/reports/output
-      # SHODAN_SEARCH_URL=http://shodan-backend:3000/search  # si usa backend externo
+      # SHODAN_SEARCH_URL=http://shodan-backend:3000/search
     ports:
       - "5000:5000"
     volumes:
       - ./reports:/app/reports
-    # Capacidades útiles para algunos tipos de escaneo con nmap (ajuste con su equipo de seguridad)
+      # (Opcional) Monta tus claves de APIs para theHarvester:
+      # - ./api-keys.yaml:/etc/theHarvester/api-keys.yaml:ro
     cap_add:
       - NET_RAW
       - NET_ADMIN
     restart: unless-stopped
+
