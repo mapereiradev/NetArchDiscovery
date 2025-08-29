@@ -215,14 +215,12 @@
     const start = $('#start');
     const proxies = $('input[name="proxies"]');
     const shodan = $('input[name="shodan"]');
-    const screenshot = $('#screenshot_dir');
     const dnsServer = $('#dns_server');
     const takeOver = $('input[name="take_over"]');
     const dnsResolveChk = $('#dns_resolve_chk');
     const dnsResolveVal = $('#dns_resolve_val');
     const dnsLookup = $('input[name="dns_lookup"]');
     const dnsBrute = $('input[name="dns_brute"]');
-    const filename = $('#filename');
     const wordlist = $('#wordlist');
     const apiScan = $('input[name="api_scan"]');
     const quiet = $('input[name="quiet"]');
@@ -243,7 +241,6 @@
     if (start.value) { cmd.push('-S', String(start.value)); }
     if (proxies?.checked) { cmd.push('-p'); }
     if (shodan?.checked) { cmd.push('-s'); }
-    if (screenshot.value) { cmd.push('--screenshot', shellEscape(screenshot.value)); }
     if (dnsServer.value) { cmd.push('-e', shellEscape(dnsServer.value)); }
     if (takeOver?.checked) { cmd.push('-t'); }
     if (dnsResolveChk?.checked) {
@@ -252,7 +249,6 @@
     }
     if (dnsLookup?.checked) { cmd.push('-n'); }
     if (dnsBrute?.checked) { cmd.push('-c'); }
-    if (filename.value) { cmd.push('-f', shellEscape(filename.value)); }
     if (wordlist.value) { cmd.push('-w', shellEscape(wordlist.value)); }
     if (apiScan?.checked) { cmd.push('-a'); }
     if (quiet?.checked) { cmd.push('-q'); }
@@ -269,8 +265,8 @@
 
       // Eventos para refrescar la vista
     [
-      domain, limit, start, proxies, shodan, screenshot, dnsServer, takeOver,
-      dnsResolveChk, dnsResolveVal, dnsLookup, dnsBrute, filename, wordlist,
+      domain, limit, start, proxies, shodan, dnsServer, takeOver,
+      dnsResolveChk, dnsResolveVal, dnsLookup, dnsBrute, wordlist,
       apiScan, quiet, sources
     ].filter(Boolean).forEach(el => {
       const evt = (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'radio') ? 'change' : 'input';

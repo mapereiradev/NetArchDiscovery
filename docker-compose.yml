@@ -1,0 +1,18 @@
+services:
+  netarch:
+    build: .
+    container_name: netarch
+    env_file:
+      - .env
+    environment:
+      - REPORT_DIR=/app/reports/output
+      # SHODAN_SEARCH_URL=http://shodan-backend:3000/search  # si usa backend externo
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./reports:/app/reports
+    # Capacidades útiles para algunos tipos de escaneo con nmap (ajuste con su equipo de seguridad)
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    restart: unless-stopped

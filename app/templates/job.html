@@ -146,6 +146,28 @@
       <p class="muted">Sin hosts.</p>
     {% endif %}
 
+    <h4>IPs ({{ data.ips|length if data.ips is defined else 0 }})</h4>
+    {% if data.ips is defined and data.ips|length > 0 %}
+      <ul style="margin-left: 20px;">
+        {% for h in data.ips[:20] %}
+          <li>{{ h }}</li>
+        {% endfor %}
+      </ul>
+      {% if data.ips|length > 20 %}
+        <details>
+          <summary>Ver los {{ data.ips|length - 20 }} restantes</summary>
+          <ul style="margin-left: 20px;">
+            {% for h in data.ips[20:] %}
+              <li>{{ h }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% endif %}
+    {% else %}
+      <p class="muted">Sin IPs.</p>
+    {% endif %}
+
+
     <h4>Emails ({{ data.emails|length if data.emails is defined else 0 }})</h4>
     {% if data.emails is defined and data.emails|length > 0 %}
       <ul style="margin-left: 20px;">

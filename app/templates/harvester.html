@@ -79,13 +79,6 @@
         </div>
 
         <div>
-          <label for="screenshot_dir"><strong>Screenshots de subdominios</strong>
-            <small>Flag <code class="kbd">--screenshot</code> (directorio de salida)</small>
-          </label>
-          <input id="screenshot_dir" name="screenshot" type="text" placeholder="reports/screens/">
-        </div>
-
-        <div>
           <label for="dns_server"><strong>Servidor DNS</strong>
             <small>Flag <code class="kbd">-e</code> / <code class="kbd">--dns-server</code></small>
           </label>
@@ -127,13 +120,6 @@
           <div class="chips">
             <label class="chip"><input type="checkbox" name="dns_brute" value="1"> Activar</label>
           </div>
-        </div>
-
-        <div>
-          <label for="filename"><strong>Archivo de salida</strong>
-            <small>Flag <code class="kbd">-f</code> (genera XML y JSON)</small>
-          </label>
-          <input id="filename" name="filename" type="text" placeholder="reports/acme-{{ '%Y%m%d'|strftime if false else '' }}.harvester">
         </div>
 
         <div>
